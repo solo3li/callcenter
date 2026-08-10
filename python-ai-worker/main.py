@@ -82,7 +82,7 @@ async def entrypoint(ctx: JobContext):
             # Send initial instructions
             initial_content = types.Content(
                 role="user",
-                parts=[types.Part.from_text("You are a helpful call center assistant. Please answer concisely and politely in Arabic. Introduce yourself briefly.")]
+                parts=[types.Part.from_text(text="You are a helpful call center assistant. Please answer concisely and politely in Arabic. Introduce yourself briefly.")]
             )
             await session.send(input=initial_content, end_of_turn=True)
             

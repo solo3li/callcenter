@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "/app/backend/backend.csproj": {}
+    "/root/callcenter/backend/backend.csproj": {}
   },
   "projects": {
-    "/app/backend/backend.csproj": {
+    "/root/callcenter/backend/backend.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/app/backend/backend.csproj",
+        "projectUniqueName": "/root/callcenter/backend/backend.csproj",
         "projectName": "backend",
-        "projectPath": "/app/backend/backend.csproj",
+        "projectPath": "/root/callcenter/backend/backend.csproj",
         "packagesPath": "/root/.nuget/packages/",
-        "outputPath": "/app/backend/obj/",
+        "outputPath": "/root/callcenter/backend/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "/root/.nuget/NuGet/NuGet.Config"
@@ -20,6 +20,7 @@
           "net9.0"
         ],
         "sources": {
+          "/usr/lib/dotnet/library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -38,11 +39,21 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "9.0.300"
+        "SdkAnalysisLevel": "10.0.100"
       },
       "frameworks": {
         "net9.0": {
           "targetAlias": "net9.0",
+          "dependencies": {
+            "System.IdentityModel.Tokens.Jwt": {
+              "target": "Package",
+              "version": "[8.22.0, )"
+            },
+            "jose-jwt": {
+              "target": "Package",
+              "version": "[5.3.0, )"
+            }
+          },
           "imports": [
             "net461",
             "net462",
@@ -54,6 +65,20 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.18, 9.0.18]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Host.linux-x64",
+              "version": "[9.0.18, 9.0.18]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.18, 9.0.18]"
+            }
+          ],
           "frameworkReferences": {
             "Microsoft.AspNetCore.App": {
               "privateAssets": "none"
@@ -62,7 +87,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/9.0.316/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "/usr/lib/dotnet/sdk/10.0.110/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

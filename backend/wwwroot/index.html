@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Assistant Interface</title>
+    <meta name="description" content="Connect to your LiveKit AI Assistant">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Ambient background elements -->
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        
+        <main class="glass-panel main-panel">
+            <header>
+                <h1>AI Assistant</h1>
+                <p class="status-text" id="status-text">Disconnected</p>
+            </header>
+
+            <div class="visualizer-container" id="visualizer-container">
+                <div class="pulse-ring" id="pulse-ring"></div>
+                <div class="avatar-circle">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        <line x1="12" y1="19" x2="12" y2="22"></line>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="btn-connect" class="btn btn-primary">
+                    Start Call
+                </button>
+                <button id="btn-disconnect" class="btn btn-danger hidden">
+                    End Call
+                </button>
+            </div>
+            
+            <div id="media-container" class="hidden"></div>
+        </main>
+    </div>
+
+    <!-- LiveKit SDK via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

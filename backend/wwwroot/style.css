@@ -1,0 +1,212 @@
+:root {
+    --bg-dark: #0a0a0e;
+    --glass-bg: rgba(25, 25, 35, 0.4);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --primary: #4ade80;
+    --primary-glow: rgba(74, 222, 128, 0.5);
+    --danger: #f87171;
+    --text-primary: #ffffff;
+    --text-secondary: #94a3b8;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.app-container {
+    position: relative;
+    width: 100%;
+    max-width: 480px;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+@media (min-width: 768px) {
+    .app-container {
+        height: auto;
+        min-height: 600px;
+    }
+}
+
+/* Ambient Blobs */
+.blob {
+    position: absolute;
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    filter: blur(80px);
+    z-index: -1;
+    opacity: 0.6;
+    animation: float 10s ease-in-out infinite alternate;
+}
+
+.blob-1 {
+    background: #3b82f6;
+    top: -50px;
+    left: -50px;
+}
+
+.blob-2 {
+    background: #8b5cf6;
+    bottom: -50px;
+    right: -50px;
+    animation-delay: -5s;
+}
+
+@keyframes float {
+    0% { transform: translate(0, 0) scale(1); }
+    100% { transform: translate(30px, -50px) scale(1.1); }
+}
+
+/* Glass Panel */
+.glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 24px;
+    padding: 40px 32px;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+header {
+    text-align: center;
+    margin-bottom: 48px;
+}
+
+h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    letter-spacing: -0.025em;
+}
+
+.status-text {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-weight: 400;
+    transition: color 0.3s ease;
+}
+
+/* Visualizer */
+.visualizer-container {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 56px;
+}
+
+.avatar-circle {
+    width: 80px;
+    height: 80px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    color: var(--text-primary);
+    transition: all 0.3s ease;
+}
+
+.pulse-ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 2px solid var(--primary);
+    opacity: 0;
+    transform: scale(0.8);
+    transition: all 0.3s ease;
+}
+
+.is-active .pulse-ring {
+    animation: pulse 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+.is-active .avatar-circle {
+    box-shadow: 0 0 30px var(--primary-glow);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+@keyframes pulse {
+    0% { transform: scale(0.8); opacity: 0.8; }
+    100% { transform: scale(1.5); opacity: 0; }
+}
+
+/* Controls */
+.controls {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+.btn {
+    width: 100%;
+    padding: 16px 24px;
+    border-radius: 12px;
+    border: none;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn:active {
+    transform: scale(0.97);
+}
+
+.btn-primary {
+    background: var(--text-primary);
+    color: var(--bg-dark);
+}
+
+.btn-primary:hover {
+    background: #e2e8f0;
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+}
+
+.btn-danger {
+    background: rgba(248, 113, 113, 0.1);
+    color: var(--danger);
+    border: 1px solid rgba(248, 113, 113, 0.2);
+}
+
+.btn-danger:hover {
+    background: rgba(248, 113, 113, 0.2);
+    box-shadow: 0 0 20px rgba(248, 113, 113, 0.2);
+}
+
+.hidden {
+    display: none !important;
+}
