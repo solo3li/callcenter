@@ -17,10 +17,10 @@ async function startCall() {
         const data = await response.json();
         let { token, url } = data;
         
-        // If the backend returns localhost, replace it with the actual VPS IP/hostname 
-        // that the browser used to access the page.
+        // Route LiveKit WebSocket through the same host so Caddy can proxy it
         if (url.includes('127.0.0.1') || url.includes('localhost')) {
-            url = `ws://${window.location.hostname}:7880`;
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            url = `${protocol}//${window.location.host}`;
         }
 
         // Initialize LiveKit Room

@@ -58,3 +58,10 @@ services:
     restart: always
     depends_on:
       - livekit
+
+  caddy:
+    image: caddy:alpine
+    network_mode: host
+    restart: always
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
