@@ -43,14 +43,18 @@ services:
     network_mode: host
     restart: always
 
-  go-ai-worker:
-    build: ./go-ai-worker
-    network_mode: host
+  python-ai-worker:
+    build:
+      context: ./python-ai-worker
+      dockerfile: Dockerfile
+
+    network_mode: "host"
     environment:
       - LIVEKIT_URL=ws://127.0.0.1:7880
       - LIVEKIT_API_KEY=devkey
       - LIVEKIT_API_SECRET=secret
       - GEMINI_API_KEY=AQ.Ab8RN6IcYXc8ArNRAhWiYfv3IFBW1-3FfFDSXSk1Ld3eVkNDiA
+      - GOOGLE_API_KEY=AQ.Ab8RN6IcYXc8ArNRAhWiYfv3IFBW1-3FfFDSXSk1Ld3eVkNDiA
     restart: always
     depends_on:
       - livekit
