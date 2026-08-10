@@ -1,0 +1,5 @@
+services:
+  asterisk:
+    build: .
+    network_mode: host
+    restart: always
