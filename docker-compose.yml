@@ -1,8 +1,56 @@
+version: '3.8'
 services:
   asterisk:
-    build: .
+    build: ./asterisk
     network_mode: host
     restart: always
     volumes:
-      - ./pjsip.conf:/etc/asterisk/pjsip.conf
-      - ./extensions.conf:/etc/asterisk/extensions.conf
+      - ./asterisk/pjsip.conf:/etc/asterisk/pjsip.conf
+      - ./asterisk/extensions.conf:/etc/asterisk/extensions.conf
+    depends_on:
+      - livekit-sip
+
+  redis:
+    image: redis:7-alpine
+    network_mode: host
+    restart: always
+
+  livekit:
+    image: livekit/livekit-server:latest
+    network_mode: host
+    command: --dev --redis-host 127.0.0.1:6379
+    restart: always
+    depends_on:
+      - redis
+
+  livekit-sip:
+    image: livekit/sip:latest
+    network_mode: host
+    command: --config /sip/config.yaml
+    environment:
+      - LIVEKIT_URL=http://127.0.0.1:7880
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=secret
+      - SIP_PORT=5061
+    volumes:
+      - ./livekit-sip.yaml:/sip/config.yaml
+    restart: always
+    depends_on:
+      - livekit
+
+  backend:
+    build: ./backend
+    network_mode: host
+    restart: always
+
+  go-ai-worker:
+    build: ./go-ai-worker
+    network_mode: host
+    environment:
+      - LIVEKIT_URL=ws://127.0.0.1:7880
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=secret
+      - GEMINI_API_KEY=AQ.Ab8RN6IcYXc8ArNRAhWiYfv3IFBW1-3FfFDSXSk1Ld3eVkNDiA
+    restart: always
+    depends_on:
+      - livekit
