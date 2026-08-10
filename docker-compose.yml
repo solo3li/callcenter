@@ -3,3 +3,6 @@ services:
     build: .
     network_mode: host
     restart: always
+    volumes:
+      - ./pjsip.conf:/etc/asterisk/pjsip.conf
+      - ./extensions.conf:/etc/asterisk/extensions.conf
