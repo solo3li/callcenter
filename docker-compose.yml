@@ -18,7 +18,7 @@ services:
   livekit:
     image: livekit/livekit-server:latest
     network_mode: host
-    command: --dev --redis-host 127.0.0.1:6379
+    command: --dev --redis-host 127.0.0.1:6379 --node-ip 167.71.66.188
     restart: always
     depends_on:
       - redis
