@@ -1,13 +1,7 @@
-port: 5061
-sip_port: 5061
-sip:
-  port: 5061
-  listen_port: 5061
-
-livekit:
-  url: http://127.0.0.1:7880
-  api_key: devkey
-  api_secret: secret
-
 redis:
   address: 127.0.0.1:6379
+api_key: devkey
+api_secret: secret
+ws_url: ws://127.0.0.1:7880
+sip_port: 5061
+sip_port_listen: 5061
