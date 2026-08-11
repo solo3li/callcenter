@@ -73,18 +73,19 @@ async def entrypoint(ctx: JobContext):
         await ctx.room.local_participant.publish_track(audio_track, options)
         
         # We must set response_modalities to AUDIO so it returns audio inline_data
-        config = {"response_modalities": ["AUDIO"]}
+        config = {
+            "response_modalities": ["AUDIO"],
+            "system_instruction": types.Content(
+                parts=[types.Part.from_text(text="You are a helpful call center assistant. Please answer concisely and politely in Arabic. Introduce yourself briefly.")]
+            )
+        }
         
         logger.info("Connecting to Gemini Live API...")
         async with client.aio.live.connect(model="gemini-3.1-flash-live-preview", config=config) as session:
             logger.info("Connected to Gemini Live API!")
             
-            # Send initial instructions
-            initial_content = types.Content(
-                role="user",
-                parts=[types.Part.from_text(text="You are a helpful call center assistant. Please answer concisely and politely in Arabic. Introduce yourself briefly.")]
-            )
-            await session.send(input=initial_content, end_of_turn=True)
+            # Send an initial greeting to trigger the AI to start speaking
+            await session.send(input="مرحبا", end_of_turn=True)
             
             asyncio.create_task(process_gemini_responses(session, audio_source))
 
