@@ -22,14 +22,22 @@ async def entrypoint(ctx: JobContext):
     
     os.environ["GOOGLE_API_KEY"] = google_api_key
 
-    await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
-
     # Note: gemini-2.0-flash-exp requires the Beta API. 
     model = google.beta.realtime.RealtimeModel()
     
     agent = Agent(instructions="You are a helpful call center assistant. Please answer concisely and politely in Arabic. Introduce yourself briefly.")
     session = AgentSession(llm=model)
+    
     await session.start(agent, room=ctx.room)
+    
+    await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+    
+    try:
+        await session.generate_reply(
+            instructions="Greet the user in Arabic and introduce yourself as a helpful call center assistant."
+        )
+    except Exception as exc:
+        logger.warning("Initial greeting failed: %s", exc)
 
 if __name__ == "__main__":
     cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
