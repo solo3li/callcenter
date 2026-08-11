@@ -20,7 +20,7 @@ async def process_audio_stream(audio_stream: rtc.AudioStream, gemini_session):
         async for frame_event in audio_stream:
             audio_bytes = frame_event.frame.data.tobytes()
             await gemini_session.send_realtime_input(
-                media=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000")
+                audio=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000")
             )
     except Exception as e:
         logger.error(f"Error reading audio stream: {e}", exc_info=True)
