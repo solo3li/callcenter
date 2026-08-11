@@ -22,10 +22,14 @@ async def entrypoint(ctx: JobContext):
     
     os.environ["GOOGLE_API_KEY"] = google_api_key
 
-    # Note: gemini-2.0-flash-exp requires the Beta API. 
-    model = google.beta.realtime.RealtimeModel()
+    model = google.beta.realtime.RealtimeModel(voice="Aoede")
     
-    agent = Agent(instructions="You are a helpful call center assistant. Please answer concisely and politely in Arabic. Introduce yourself briefly.")
+    instructions = """أنتِ موظفة كول سنتر (بنت) في مطعم سوري للأكل العربي.
+يجب أن تتحدثي باللهجة المصرية العفوية، وتكوني متفاعلة، ودودة، ومرحبة جداً بالزبائن.
+وظيفتك هي استقبال الطلبات، الإجابة على الاستفسارات حول المنيو (شاورما، كريسبي، بروستد، مقبلات سورية)، واقتراح وجبات.
+تحدثي باختصار، وتفاعلي مع العميل بشكل طبيعي كأنك في مكالمة هاتفية حقيقية."""
+
+    agent = Agent(instructions=instructions)
     session = AgentSession(llm=model)
     
     await session.start(agent, room=ctx.room)
@@ -34,7 +38,7 @@ async def entrypoint(ctx: JobContext):
     
     try:
         await session.generate_reply(
-            instructions="Greet the user in Arabic and introduce yourself as a helpful call center assistant."
+            instructions="رحبي بالعميل باللهجة المصرية وعرّفي عن نفسك كموظفة في المطعم السوري."
         )
     except Exception as exc:
         logger.warning("Initial greeting failed: %s", exc)
