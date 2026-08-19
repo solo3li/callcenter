@@ -80,7 +80,7 @@
     <h1 id="page-title" class="text-lg font-semibold text-white">Dashboard</h1>
     <div class="flex items-center gap-4">
       <div class="text-sm text-gray-400" id="clock"></div>
-      <audio id="live-audio" autoplay></audio>
+      <div id="audio-container" class="hidden"></div>
       <div id="monitoring-pill" class="hidden items-center gap-2 bg-green-900 text-green-300 px-3 py-1.5 rounded-full text-xs">
         <span class="pulse">🔴</span> Live Monitoring: <span id="monitoring-room-name"></span>
         <button onclick="stopMonitoring()" class="ml-2 hover:text-white">✕</button>
@@ -455,7 +455,13 @@ async function monitorCall(roomName) {
   const data = await res.json();
   liveRoom = new LivekitClient.Room();
   liveRoom.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
-    if (track.kind === 'audio') track.attach(document.getElementById('live-audio'));
+    if (track.kind === 'audio') {
+      const el = track.attach();
+      document.getElementById('audio-container').appendChild(el);
+    }
+  });
+  liveRoom.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track) => {
+    track.detach().forEach(el => el.remove());
   });
   await liveRoom.connect(data.url, data.token);
   const pill = document.getElementById('monitoring-pill');

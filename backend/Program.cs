@@ -187,8 +187,10 @@ app.MapPost("/api/call/summary", async (SummaryDto req, AppDbContext db) => {
 app.MapGet("/api/calls", async (AppDbContext db, string? status, string? date) => {
     var query = db.Calls.AsQueryable();
     if (!string.IsNullOrEmpty(status)) query = query.Where(c => c.Status == status);
-    if (!string.IsNullOrEmpty(date) && DateTime.TryParse(date, out var d))
-        query = query.Where(c => c.StartTime.Date == d.Date);
+    if (!string.IsNullOrEmpty(date) && DateTime.TryParse(date, out var d)) {
+        var utcDate = DateTime.SpecifyKind(d.Date, DateTimeKind.Utc);
+        query = query.Where(c => c.StartTime.Date == utcDate);
+    }
     var calls = await query.OrderByDescending(c => c.StartTime).Take(200).ToListAsync();
     return Results.Ok(calls);
 });
@@ -215,7 +217,7 @@ app.MapPost("/api/calls/{roomName}/end", async (string roomName, AppDbContext db
 
 // ── STATS TODAY ────────────────────────────────────────────────────────────────
 app.MapGet("/api/stats/today", async (AppDbContext db) => {
-    var today = DateTime.UtcNow.Date;
+    var today = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);
     var calls = await db.Calls.Where(c => c.StartTime.Date == today).ToListAsync();
     var active = await db.Calls.CountAsync(c => c.Status == "Active" || c.Status == "Transferred");
     var agentsOnline = await db.Agents.CountAsync(a => a.IsOnline);

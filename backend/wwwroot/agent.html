@@ -200,7 +200,7 @@
   </div>
 </div>
 
-<audio id="agent-audio" autoplay></audio>
+<div id="audio-container" class="hidden"></div>
 
 <script>
 // ── STATE ──────────────────────────────────────────────────────────────────
@@ -340,7 +340,13 @@ async function answerCall() {
 
   liveRoom = new LivekitClient.Room();
   liveRoom.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
-    if (track.kind === 'audio') track.attach(document.getElementById('agent-audio'));
+    if (track.kind === 'audio') {
+      const el = track.attach();
+      document.getElementById('audio-container').appendChild(el);
+    }
+  });
+  liveRoom.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track) => {
+    track.detach().forEach(el => el.remove());
   });
   liveRoom.on(LivekitClient.RoomEvent.ParticipantDisconnected, (participant) => {
     if (participant.identity.startsWith('sip') || participant.identity.includes('SIP')) {
