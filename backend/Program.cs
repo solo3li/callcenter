@@ -37,6 +37,12 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated(); // Ensure DB is created
+    
+    // Seed default agent if not exists
+    if (!db.Agents.Any()) {
+        db.Agents.Add(new backend.Models.AgentUser { Username = "admin", PasswordHash = "adminpassword", IsOnline = true });
+        db.SaveChanges();
+    }
 }
 
 app.UseCors();

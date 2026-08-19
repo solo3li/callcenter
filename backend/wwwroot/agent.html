@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Agent App</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <style>
+        body { background-color: #f8f9fa; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .card { width: 100%; max-width: 400px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-radius: 12px; background: white; text-align: center; }
+        .ringing { animation: shake 0.8s infinite; border: 2px solid #dc3545; }
+        @keyframes shake { 0% { transform: translateX(0); } 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } 100% { transform: translateX(0); } }
+    </style>
+</head>
+<body>
+
+<div class="card" id="login-view">
+    <h3 class="mb-4">Agent Login</h3>
+    <input type="text" id="username" class="form-control mb-3" value="admin" placeholder="Username">
+    <input type="password" id="password" class="form-control mb-3" value="adminpassword" placeholder="Password">
+    <button class="btn btn-primary w-100" onclick="login()">Login</button>
+</div>
+
+<div class="card d-none" id="dashboard-view">
+    <h3>Agent Dashboard</h3>
+    <p class="text-success fw-bold">🟢 Online & Waiting</p>
+    <div id="incoming-call-box" class="d-none mt-4 p-3 bg-light rounded ringing">
+        <h5 class="text-danger">🚨 Incoming Transfer!</h5>
+        <p id="call-room-name" class="fw-bold"></p>
+        <button class="btn btn-success w-100 py-2 fs-5" onclick="answerCall()">Answer Call</button>
+    </div>
+    <div id="active-call-box" class="d-none mt-4 p-3 bg-success text-white rounded">
+        <h5>🎙️ Active Call</h5>
+        <p id="active-room-name"></p>
+        <button class="btn btn-danger w-100 py-2" onclick="endCall()">End Call</button>
+    </div>
+</div>
+
+<div id="audio-container"></div>
+
+<script>
+    let currentRoomName = null;
+    let room = null;
+    let connection = null;
+
+    async function login() {
+        const user = document.getElementById('username').value;
+        const pass = document.getElementById('password').value;
+        const res = await fetch('/api/agent/login', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({username: user, password: pass})
+        });
+        if(res.ok) {
+            document.getElementById('login-view').classList.add('d-none');
+            document.getElementById('dashboard-view').classList.remove('d-none');
+            setupSignalR(user);
+        } else {
+            alert('Login failed');
+        }
+    }
+
+    function setupSignalR(username) {
+        connection = new signalR.HubConnectionBuilder()
+            .withUrl(`/hubs/call?username=${username}`)
+            .withAutomaticReconnect()
+            .build();
+
+        connection.on("IncomingTransfer", (roomName) => {
+            currentRoomName = roomName;
+            document.getElementById('call-room-name').innerText = roomName;
+            document.getElementById('incoming-call-box').classList.remove('d-none');
+        });
+
+        connection.start().then(() => console.log('SignalR Connected')).catch(err => console.error(err));
+    }
+
+    async function answerCall() {
+        document.getElementById('incoming-call-box').classList.add('d-none');
+        document.getElementById('active-call-box').classList.remove('d-none');
+        document.getElementById('active-room-name').innerText = currentRoomName;
+
+        const user = document.getElementById('username').value;
+        const res = await fetch(`/api/token?identity=agent_${user}&room=${currentRoomName}`);
+        const data = await res.json();
+
+        room = new LivekitClient.Room();
+        
+        room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+            if (track.kind === 'audio') {
+                const element = track.attach();
+                document.getElementById('audio-container').appendChild(element);
+            }
+        });
+
+        await room.connect(data.url, data.token);
+        await room.localParticipant.setMicrophoneEnabled(true);
+    }
+
+    async function endCall() {
+        if(room) {
+            room.disconnect();
+            room = null;
+        }
+        document.getElementById('active-call-box').classList.add('d-none');
+        const rName = currentRoomName;
+        currentRoomName = null;
+        await fetch(`/api/calls/${rName}/end`, { method: 'POST' });
+    }
+</script>
+
+</body>
+</html>
