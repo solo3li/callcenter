@@ -1,14 +1,14 @@
 :8080 {
     # Route LiveKit signaling endpoints to the LiveKit Server
     handle /rtc/* {
-        reverse_proxy 127.0.0.1:7880
+        reverse_proxy livekit:7880
     }
     handle /twirp/* {
-        reverse_proxy 127.0.0.1:7880
+        reverse_proxy livekit:7880
     }
     
     # Route all other requests to the ASP.NET Core UI / Backend
     handle {
-        reverse_proxy 127.0.0.1:5000
+        reverse_proxy backend:5000
     }
 }

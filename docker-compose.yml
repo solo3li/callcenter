@@ -2,33 +2,38 @@ version: '3.8'
 services:
   asterisk:
     build: ./asterisk
-    network_mode: host
+    ports:
+      - "5060:5060/udp"
+      - "5060:5060/tcp"
+      - "10000-10050:10000-10050/udp"
     restart: always
     volumes:
       - ./asterisk/pjsip.conf:/etc/asterisk/pjsip.conf
       - ./asterisk/extensions.conf:/etc/asterisk/extensions.conf
+      - ./asterisk/rtp.conf:/etc/asterisk/rtp.conf
     depends_on:
       - livekit-sip
 
   redis:
     image: redis:7-alpine
-    network_mode: host
     restart: always
 
   livekit:
     image: livekit/livekit-server:latest
-    network_mode: host
-    command: --dev --redis-host 127.0.0.1:6379 --node-ip 167.71.66.188 --bind 0.0.0.0
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+    command: --dev --redis-host redis:6379 --node-ip 127.0.0.1 --bind 0.0.0.0
     restart: always
     depends_on:
       - redis
 
   livekit-sip:
     image: livekit/sip:latest
-    network_mode: host
     command: --config /sip/config.yaml
     environment:
-      - LIVEKIT_URL=http://127.0.0.1:7880
+      - LIVEKIT_URL=http://livekit:7880
       - LIVEKIT_API_KEY=devkey
       - LIVEKIT_API_SECRET=secret
       - SIP_PORT=5061
@@ -40,28 +45,26 @@ services:
 
   backend:
     build: ./backend
-    network_mode: host
     restart: always
 
   python-ai-worker:
     build:
       context: ./python-ai-worker
       dockerfile: Dockerfile
-
-    network_mode: "host"
     environment:
-      - LIVEKIT_URL=ws://127.0.0.1:7880
+      - LIVEKIT_URL=ws://livekit:7880
       - LIVEKIT_API_KEY=devkey
       - LIVEKIT_API_SECRET=secret
-      - GEMINI_API_KEY=AQ.Ab8RN6IcYXc8ArNRAhWiYfv3IFBW1-3FfFDSXSk1Ld3eVkNDiA
-      - GOOGLE_API_KEY=AQ.Ab8RN6IcYXc8ArNRAhWiYfv3IFBW1-3FfFDSXSk1Ld3eVkNDiA
+      - GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+      - GOOGLE_API_KEY=YOUR_GEMINI_API_KEY
     restart: always
     depends_on:
       - livekit
 
   caddy:
     image: caddy:alpine
-    network_mode: host
+    ports:
+      - "8080:8080"
     restart: always
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
