@@ -25,7 +25,10 @@ async def entrypoint(ctx: JobContext):
     
     os.environ["GOOGLE_API_KEY"] = google_api_key
 
-    model = google.beta.realtime.RealtimeModel(voice="Aoede")
+    model = google.beta.realtime.RealtimeModel(
+        model="models/gemini-2.0-flash",
+        voice="Aoede"
+    )
     
     instructions = """أنتِ موظفة كول سنتر في مطعم سوري. 
 تحدثي باللهجة المصرية بأسلوب ودود.
