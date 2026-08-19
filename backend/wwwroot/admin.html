@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Call Center Admin Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <style>
+        body { padding: 20px; background-color: #f8f9fa; }
+        .card { margin-bottom: 20px; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">Admin Dashboard</h1>
+
+        <!-- Live Audio Player (Hidden) -->
+        <audio id="live-audio" autoplay></audio>
+
+        <div id="monitoring-banner" class="alert alert-success hidden">
+            <strong>Monitoring Live:</strong> Room <span id="monitoring-room"></span>
+            <button class="btn btn-sm btn-danger float-end" onclick="stopMonitoring()">Stop Listening</button>
+        </div>
+
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Recent Calls</h5>
+                <button class="btn btn-primary btn-sm" onclick="fetchCalls()">Refresh</button>
+            </div>
+            <div class="card-body">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Room Name</th>
+                            <th>Start Time</th>
+                            <th>Status</th>
+                            <th>Agent ID</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="calls-body">
+                        <!-- Filled by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Summary Modal -->
+        <div class="modal fade" id="summaryModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Call Summary</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p id="summary-text"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recording Modal -->
+        <div class="modal fade" id="recordingModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Call Recording</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" onclick="document.getElementById('recordingPlayer').pause()"></button>
+                    </div>
+                    <div class="modal-body text-center">
+                        <video id="recordingPlayer" controls style="max-width: 100%;"><source id="recordingSource" src="" type="video/webm"></video>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentRoom = null;
+
+        async function fetchCalls() {
+            const res = await fetch('/api/calls');
+            const calls = await res.json();
+            const tbody = document.getElementById('calls-body');
+            tbody.innerHTML = '';
+            
+            calls.forEach(call => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${call.id}</td>
+                    <td>${call.roomName}</td>
+                    <td>${new Date(call.startTime).toLocaleString()}</td>
+                    <td><span class="badge bg-${call.status === 'Active' || !call.endTime ? 'success' : 'secondary'}">${call.status || (call.endTime ? 'Completed' : 'Active')}</span></td>
+                    <td>${call.handledByAgentId || 'AI Only'}</td>
+                    <td>
+                        ${!call.endTime ? `<button class="btn btn-sm btn-warning" onclick="monitorCall('${call.roomName}')">Listen Live</button>` : ''}
+                        ${call.summary ? `<button class="btn btn-sm btn-info" onclick="showSummary('${call.summary.replace(/'/g, "\\'")}')">Summary</button>` : ''}
+                        ${call.recordingUrl ? `<button class="btn btn-sm btn-success ms-1" onclick="playRecording('${call.recordingUrl}')">Recording</button>` : ''}
+                        <button class="btn btn-sm btn-danger ms-1" onclick="deleteCall('${call.roomName}')">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function monitorCall(roomName) {
+            if (currentRoom) {
+                currentRoom.disconnect();
+            }
+
+            try {
+                // Fetch admin token
+                const res = await fetch(`/api/token?identity=admin_${Date.now()}&room=${roomName}`);
+                const data = await res.json();
+                
+                // Initialize LiveKit Room
+                currentRoom = new LivekitClient.Room();
+                
+                currentRoom.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                    if (track.kind === 'audio') {
+                        const audioElement = document.getElementById('live-audio');
+                        track.attach(audioElement);
+                    }
+                });
+
+                await currentRoom.connect(data.url, data.token);
+                
+                document.getElementById('monitoring-banner').classList.remove('hidden');
+                document.getElementById('monitoring-room').innerText = roomName;
+                
+            } catch (e) {
+                alert('Error connecting to live call: ' + e.message);
+            }
+        }
+
+        function stopMonitoring() {
+            if (currentRoom) {
+                currentRoom.disconnect();
+                currentRoom = null;
+            }
+            document.getElementById('monitoring-banner').classList.add('hidden');
+        }
+
+        function showSummary(text) {
+            document.getElementById('summary-text').innerText = text;
+            new bootstrap.Modal(document.getElementById('summaryModal')).show();
+        }
+
+        async function deleteCall(roomName) {
+            if(confirm('Are you sure you want to end and delete this room?')) {
+                await fetch('/api/calls/' + roomName, { method: 'DELETE' });
+                fetchCalls();
+            }
+        }
+
+        // Auto fetch every 5 seconds
+        fetchCalls();
+        setInterval(fetchCalls, 5000);
+    </script>
+</body>
+</html>

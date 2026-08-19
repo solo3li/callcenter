@@ -45,7 +45,14 @@ services:
 
   backend:
     build: ./backend
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=callcenter;Username=admin;Password=adminpassword
+      - LIVEKIT_URL=http://livekit:7880
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=secret
     restart: always
+    depends_on:
+      - db
 
   python-ai-worker:
     build:
@@ -61,6 +68,56 @@ services:
     depends_on:
       - livekit
 
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: adminpassword
+      POSTGRES_DB: callcenter
+    ports:
+      - "5432:5432"
+    restart: always
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: adminpassword
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    restart: always
+    volumes:
+      - miniodata:/data
+
+  minio-init:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set myminio http://minio:9000 admin adminpassword;
+      mc mb myminio/recordings || true;
+      mc anonymous set public myminio/recordings || true;
+      exit 0;
+      "
+
+  egress:
+    image: livekit/egress:latest
+    environment:
+      - EGRESS_API_KEY=devkey
+      - EGRESS_API_SECRET=secret
+      - EGRESS_WS_URL=ws://livekit:7880
+      - EGRESS_REDIS_ADDRESS=redis:6379
+    restart: always
+    depends_on:
+      - livekit
+      - redis
+
   caddy:
     image: caddy:alpine
     ports:
@@ -68,3 +125,7 @@ services:
     restart: always
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
+
+volumes:
+  pgdata:
+  miniodata:

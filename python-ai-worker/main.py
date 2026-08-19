@@ -1,11 +1,14 @@
 import logging
 import os
+import aiohttp
+import asyncio
 from livekit.agents import (
     AutoSubscribe,
     JobContext,
     WorkerOptions,
     cli,
     Agent,
+    llm,
     AgentSession
 )
 from livekit.plugins import google
@@ -24,21 +27,47 @@ async def entrypoint(ctx: JobContext):
 
     model = google.beta.realtime.RealtimeModel(voice="Aoede")
     
-    instructions = """أنتِ موظفة كول سنتر (بنت) في مطعم سوري للأكل العربي.
-يجب أن تتحدثي باللهجة المصرية العفوية، وتكوني متفاعلة، ودودة، ومرحبة جداً بالزبائن.
-وظيفتك هي استقبال الطلبات، الإجابة على الاستفسارات حول المنيو (شاورما، كريسبي، بروستد، مقبلات سورية)، واقتراح وجبات.
-تحدثي باختصار، وتفاعلي مع العميل بشكل طبيعي كأنك في مكالمة هاتفية حقيقية."""
+    instructions = """أنتِ موظفة كول سنتر في مطعم سوري. 
+تحدثي باللهجة المصرية بأسلوب ودود.
+وظيفتك استقبال الطلبات والمساعدة.
+إذا طلب العميل التحدث مع موظف بشري (خدمة العملاء الحقيقية)، استخدمي أداة transfer_to_human فوراً وقولي له أنه سيتم تحويله."""
 
+    @llm.function_tool(description="تحويل المكالمة إلى موظف بشري عند طلب العميل")
+    async def transfer_to_human(reason: str = ""):
+        logger.info(f"Transferring call in room {ctx.room.name} to human. Reason: {reason}")
+        async with aiohttp.ClientSession() as http_session:
+            try:
+                async with http_session.post("http://backend:5000/api/call/transfer", json={"RoomName": ctx.room.name}) as resp:
+                    if resp.status == 200:
+                        asyncio.create_task(leave_room_soon(ctx))
+                        return "جاري تحويلك للموظف، ثواني معدودة"
+                    else:
+                        return "عفواً، لا يوجد موظفين متاحين الآن، هل يمكنني مساعدتك في شيء آخر؟"
+            except Exception as e:
+                logger.error(f"Failed to transfer: {e}")
+                return "عذراً، حدث خطأ أثناء التحويل."
+
+    async def leave_room_soon(ctx_local):
+        await asyncio.sleep(5)
+        await ctx_local.room.disconnect()
+
+    # Pass tools to AgentSession directly, and use the regular Agent
     agent = Agent(instructions=instructions)
-    session = AgentSession(llm=model)
+    session = AgentSession(llm=model, tools=[transfer_to_human])
     
     await session.start(agent, room=ctx.room)
-    
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+
+    # Register the call as active in the backend DB (especially useful for SIP calls)
+    async with aiohttp.ClientSession() as http_session:
+        try:
+            await http_session.post("http://backend:5000/api/call/active", json={"RoomName": ctx.room.name})
+        except Exception as e:
+            logger.warning(f"Failed to register active call: {e}")
     
     try:
         await session.generate_reply(
-            instructions="رحبي بالعميل باللهجة المصرية وعرّفي عن نفسك كموظفة في المطعم السوري."
+            instructions="رحبي بالعميل وعرّفي عن نفسك كموظفة."
         )
     except Exception as exc:
         logger.warning("Initial greeting failed: %s", exc)

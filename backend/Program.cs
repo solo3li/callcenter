@@ -1,36 +1,57 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.EntityFrameworkCore;
 using Jose; // jose-jwt
+using backend.Data;
+using backend.Models;
+using backend.Hubs;
+using Microsoft.AspNetCore.SignalR;
+using System.Net.Http;
+using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add CORS policies to ensure the API is reachable
 builder.Services.AddCors(options => {
     options.AddDefaultPolicy(policy => {
         policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
     });
 });
 
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? "Host=db;Port=5432;Database=callcenter;Username=admin;Password=adminpassword";
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+builder.Services.AddSignalR();
+
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.EnsureCreated(); // Ensure DB is created
+}
 
 app.UseCors();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-app.MapGet("/api/token", (string identity = null) => {
+// Token generation for LiveKit
+app.MapGet("/api/token", async (string identity = null, string? room = null, AppDbContext db = null) => {
     if (string.IsNullOrEmpty(identity)) {
         identity = "web-user-" + Guid.NewGuid().ToString("N").Substring(0, 8);
     }
 
-    // Default development keys used in docker-compose.yml
     var apiKey = Environment.GetEnvironmentVariable("LIVEKIT_API_KEY") ?? "devkey";
     var apiSecret = Environment.GetEnvironmentVariable("LIVEKIT_API_SECRET") ?? "secret";
-    var roomName = "sip-room"; // The room AI joins
+    var roomName = room ?? ("web-room-" + Guid.NewGuid().ToString("N").Substring(0, 8));
 
     var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
     var exp = DateTimeOffset.UtcNow.AddHours(2).ToUnixTimeSeconds();
@@ -55,11 +76,142 @@ app.MapGet("/api/token", (string identity = null) => {
     var secretKey = Encoding.UTF8.GetBytes(apiSecret);
     var tokenString = JWT.Encode(payload, secretKey, JwsAlgorithm.HS256);
     
-    // We return localhost for local testing, but ideally this should be the public IP or domain of the LiveKit server.
-    // Given the network_mode is host, we can return the relative path if reverse proxied, or absolute URL.
-    var host = app.Configuration["LIVEKIT_URL"] ?? "ws://127.0.0.1:7880";
+    // Clients outside Docker need to connect to localhost or the host's IP
+    var host = "ws://127.0.0.1:7880";
 
-    return Results.Json(new { token = tokenString, url = host });
+    // Track in DB
+    if (db != null && !identity.StartsWith("admin_") && !identity.StartsWith("agent_"))
+    {
+        var existing = await db.Calls.FirstOrDefaultAsync(c => c.RoomName == roomName);
+        if (existing == null) {
+            db.Calls.Add(new CallRecord { RoomName = roomName, CallerId = identity, Status = "Active", RecordingUrl = $"http://localhost:9000/recordings/{roomName}.mp4" });
+            await db.SaveChangesAsync();
+            _ = StartRecording(roomName);
+        }
+    }
+
+    return Results.Json(new { token = tokenString, url = host, roomName = roomName });
 });
 
+// Agent Login
+app.MapPost("/api/agent/login", async (LoginDto login, AppDbContext db) => {
+    var agent = await db.Agents.FirstOrDefaultAsync(a => a.Username == login.Username && a.PasswordHash == login.Password);
+    if (agent == null) return Results.Unauthorized();
+    return Results.Ok(new { agent.Id, agent.Username });
+});
+
+// Transfer call endpoint (called by Python AI Worker)
+app.MapPost("/api/call/transfer", async (TransferDto req, AppDbContext db, IHubContext<CallHub> hubContext) => {
+    var availableAgent = await db.Agents.FirstOrDefaultAsync(a => a.IsOnline);
+    if (availableAgent == null) return Results.BadRequest("No agents available");
+
+    // Create a call record
+    var call = new CallRecord { RoomName = req.RoomName, HandledByAgentId = availableAgent.Id, Status = "Transferred" };
+    db.Calls.Add(call);
+    await db.SaveChangesAsync();
+
+    // Alert the agent via SignalR
+    await hubContext.Clients.All.SendAsync("IncomingTransfer", req.RoomName);
+
+    return Results.Ok(new { agentId = availableAgent.Id });
+});
+
+// Helper for triggering egress
+async Task StartRecording(string roomName) {
+    var apiKey = Environment.GetEnvironmentVariable("LIVEKIT_API_KEY") ?? "devkey";
+    var apiSecret = Environment.GetEnvironmentVariable("LIVEKIT_API_SECRET") ?? "secret";
+    var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    var exp = DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds();
+    var payload = new Dictionary<string, object> {
+        { "iss", apiKey }, { "nbf", now }, { "exp", exp },
+        { "video", new Dictionary<string, object> { { "roomAdmin", true }, { "room", roomName } } }
+    };
+    var token = JWT.Encode(payload, Encoding.UTF8.GetBytes(apiSecret), JwsAlgorithm.HS256);
+    
+    var reqBody = new {
+        room_name = roomName,
+        file = new {
+            filepath = $"{roomName}.mp4",
+            s3 = new {
+                access_key = "admin",
+                secret = "adminpassword",
+                endpoint = "http://minio:9000",
+                bucket = "recordings",
+                force_path_style = true
+            }
+        }
+    };
+
+    using var client = new HttpClient();
+    client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+    var content = new StringContent(JsonSerializer.Serialize(reqBody), Encoding.UTF8, "application/json");
+    try {
+        var host = Environment.GetEnvironmentVariable("LIVEKIT_URL") ?? "http://livekit:7880";
+        await client.PostAsync($"{host}/twirp/livekit.Egress/StartRoomCompositeEgress", content);
+    } catch {}
+}
+
+// Register active call (called by Python AI Worker for SIP calls)
+app.MapPost("/api/call/active", async (TransferDto req, AppDbContext db) => {
+    var existing = await db.Calls.FirstOrDefaultAsync(c => c.RoomName == req.RoomName);
+    if (existing == null) {
+        db.Calls.Add(new CallRecord { RoomName = req.RoomName, CallerId = "SIP Caller", Status = "Active", RecordingUrl = $"http://localhost:9000/recordings/{req.RoomName}.mp4" });
+        await db.SaveChangesAsync();
+        _ = StartRecording(req.RoomName);
+    }
+    return Results.Ok();
+});
+
+app.MapPost("/api/call/summary", async (SummaryDto req, AppDbContext db) => {
+    var call = await db.Calls.OrderByDescending(c => c.Id).FirstOrDefaultAsync(c => c.RoomName == req.RoomName);
+    if (call == null) {
+        call = new CallRecord { RoomName = req.RoomName, Summary = req.Summary, EndTime = DateTime.UtcNow, Status = "Completed_AI" };
+        db.Calls.Add(call);
+    } else {
+        call.Summary = req.Summary;
+        call.EndTime = DateTime.UtcNow;
+    }
+    await db.SaveChangesAsync();
+    return Results.Ok();
+});
+
+app.MapGet("/api/calls", async (AppDbContext db) => {
+    var calls = await db.Calls.OrderByDescending(c => c.StartTime).Take(50).ToListAsync();
+    return Results.Ok(calls);
+});
+
+app.MapDelete("/api/calls/{roomName}", async (string roomName, AppDbContext db) => {
+    var call = await db.Calls.FirstOrDefaultAsync(c => c.RoomName == roomName);
+    if (call != null) {
+        db.Calls.Remove(call);
+        await db.SaveChangesAsync();
+    }
+
+    var apiKey = Environment.GetEnvironmentVariable("LIVEKIT_API_KEY") ?? "devkey";
+    var apiSecret = Environment.GetEnvironmentVariable("LIVEKIT_API_SECRET") ?? "secret";
+    var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    var exp = DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds();
+    var payload = new Dictionary<string, object> {
+        { "iss", apiKey }, { "nbf", now }, { "exp", exp },
+        { "video", new Dictionary<string, object> { { "roomAdmin", true }, { "room", roomName } } }
+    };
+    var token = JWT.Encode(payload, Encoding.UTF8.GetBytes(apiSecret), JwsAlgorithm.HS256);
+    
+    using var client = new HttpClient();
+    client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+    var content = new StringContent($"{{\"room\":\"{roomName}\"}}", Encoding.UTF8, "application/json");
+    try {
+        var host = app.Configuration["LIVEKIT_URL"] ?? "http://livekit:7880";
+        await client.PostAsync($"{host}/twirp/livekit.RoomService/DeleteRoom", content);
+    } catch {}
+
+    return Results.Ok();
+});
+
+app.MapHub<CallHub>("/hubs/call");
+
 app.Run("http://0.0.0.0:5000");
+
+public class LoginDto { public required string Username { get; set; } public required string Password { get; set; } }
+public class TransferDto { public required string RoomName { get; set; } }
+public class SummaryDto { public required string RoomName { get; set; } public required string Summary { get; set; } }
