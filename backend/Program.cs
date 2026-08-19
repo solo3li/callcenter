@@ -38,9 +38,14 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated(); // Ensure DB is created
     
+    // Reset all agents to offline on startup to prevent ghost online status
+    var onlineAgents = db.Agents.Where(a => a.IsOnline).ToList();
+    foreach(var a in onlineAgents) a.IsOnline = false;
+    db.SaveChanges();
+    
     // Seed default agent if not exists
     if (!db.Agents.Any()) {
-        db.Agents.Add(new backend.Models.AgentUser { Username = "admin", PasswordHash = "adminpassword", IsOnline = true });
+        db.Agents.Add(new backend.Models.AgentUser { Username = "admin", PasswordHash = "admin", IsOnline = false });
         db.SaveChanges();
     }
 }
@@ -252,10 +257,15 @@ app.MapPost("/api/calls/{roomName}/end", async (string roomName, AppDbContext db
     return Results.Ok();
 });
 
+app.MapGet("/api/agents", async (AppDbContext db) => {
+    var agents = await db.Agents.Select(a => new { a.Id, a.Username, a.IsOnline }).ToListAsync();
+    return Results.Ok(agents);
+});
+
 app.MapHub<CallHub>("/hubs/call");
 
 app.Run("http://0.0.0.0:5000");
 
 public class LoginDto { public required string Username { get; set; } public required string Password { get; set; } }
-public class TransferDto { public required string RoomName { get; set; } }
+public class TransferDto { public required string RoomName { get; set; } public string? AgentId { get; set; } }
 public class SummaryDto { public required string RoomName { get; set; } public required string Summary { get; set; } }

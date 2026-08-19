@@ -23,6 +23,25 @@
             <button class="btn btn-sm btn-danger float-end" onclick="stopMonitoring()">Stop Listening</button>
         </div>
 
+        <div class="card mb-4 shadow-sm border-0">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">👨‍💻 Support Agents Status</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Agent Username</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="agents-body">
+                        <!-- Filled by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">Recent Calls</h5>
@@ -164,9 +183,31 @@
             }
         }
 
-        // Auto fetch every 5 seconds
+        // Initialize
         fetchCalls();
+        fetchAgents();
         setInterval(fetchCalls, 5000);
+        setInterval(fetchAgents, 5000);
+
+        async function fetchAgents() {
+            try {
+                const res = await fetch('/api/agents');
+                const agents = await res.json();
+                const tbody = document.getElementById('agents-body');
+                tbody.innerHTML = agents.map(a => `
+                    <tr>
+                        <td><strong>${a.username}</strong></td>
+                        <td>
+                            <span class="badge bg-${a.isOnline ? 'success' : 'secondary'}">
+                                ${a.isOnline ? '🟢 Online' : '⚪ Offline'}
+                            </span>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error('Failed to fetch agents', err);
+            }
+        }
     </script>
 </body>
 </html>
