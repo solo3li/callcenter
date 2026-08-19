@@ -10,6 +10,7 @@ namespace backend.Models
         [JsonIgnore]
         public string PasswordHash { get; set; } = string.Empty;
         public bool IsOnline { get; set; }
+        public string Status { get; set; } = "Offline"; // Offline | Available | Break | NotReady | In Call
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }

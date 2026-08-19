@@ -1,123 +1,470 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Agent App</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
-    <style>
-        body { background-color: #f8f9fa; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .card { width: 100%; max-width: 400px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-radius: 12px; background: white; text-align: center; }
-        .ringing { animation: shake 0.8s infinite; border: 2px solid #dc3545; }
-        @keyframes shake { 0% { transform: translateX(0); } 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } 100% { transform: translateX(0); } }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Panel</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: { colors: {
+      issabel: { dark: '#1a2332', mid: '#243447', light: '#2d4059', accent: '#e67e22', green: '#27ae60', red: '#e74c3c', blue: '#3498db' }
+    }}}
+  }
+</script>
+<style>
+  body { font-family: 'Segoe UI', sans-serif; }
+  .pulse-ring { animation: pulse-ring 2s infinite; }
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(231,76,60,0.7); }
+    70% { box-shadow: 0 0 0 20px rgba(231,76,60,0); }
+    100% { box-shadow: 0 0 0 0 rgba(231,76,60,0); }
+  }
+  .slide-in { animation: slideIn 0.4s ease-out; }
+  @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: #1a2332; } ::-webkit-scrollbar-thumb { background: #3d5a80; border-radius: 2px; }
+</style>
 </head>
-<body>
+<body class="bg-issabel-dark text-gray-100 min-h-screen flex flex-col">
 
-<div class="card" id="login-view">
-    <h3 class="mb-4">Agent Login</h3>
-    <input type="text" id="username" class="form-control mb-3" value="admin" placeholder="Username">
-    <input type="password" id="password" class="form-control mb-3" value="adminpassword" placeholder="Password">
-    <button class="btn btn-primary w-100" onclick="login()">Login</button>
+<!-- ── TOP BAR ───────────────────────────────────────────────────────────── -->
+<header class="bg-issabel-mid border-b border-gray-700 px-6 py-3 flex items-center justify-between flex-shrink-0">
+  <div class="flex items-center gap-3">
+    <div class="w-9 h-9 bg-issabel-accent rounded-lg flex items-center justify-center text-white font-bold">📞</div>
+    <div>
+      <div class="text-sm font-semibold text-white">Call Center</div>
+      <div class="text-xs text-gray-400">Agent Panel</div>
+    </div>
+  </div>
+
+  <!-- Agent Info (shown after login) -->
+  <div id="agent-info-bar" class="hidden items-center gap-4">
+    <div class="text-right">
+      <div class="text-sm font-medium text-white" id="agent-name-bar">—</div>
+      <div class="text-xs text-gray-400" id="agent-uptime">00:00:00</div>
+    </div>
+    <div class="w-9 h-9 rounded-full bg-issabel-light flex items-center justify-center text-lg">👤</div>
+
+    <!-- Status Dropdown -->
+    <div class="relative">
+      <select id="status-select" onchange="changeStatus(this.value)"
+        class="bg-issabel-dark border border-gray-600 text-white text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-issabel-accent appearance-none pr-8 cursor-pointer">
+        <option value="Available">🟢 Available</option>
+        <option value="Break">🟡 On Break</option>
+        <option value="NotReady">🔴 Not Ready</option>
+      </select>
+    </div>
+
+    <!-- SignalR indicator -->
+    <div class="flex items-center gap-1.5">
+      <div id="signal-dot" class="w-2 h-2 rounded-full bg-red-500"></div>
+      <span class="text-xs text-gray-500">Live</span>
+    </div>
+  </div>
+</header>
+
+<!-- ── LOGIN SCREEN ──────────────────────────────────────────────────────── -->
+<div id="login-screen" class="flex-1 flex items-center justify-center p-6">
+  <div class="bg-issabel-mid rounded-2xl p-8 w-full max-w-sm border border-gray-700 shadow-2xl slide-in">
+    <div class="text-center mb-8">
+      <div class="w-16 h-16 bg-issabel-accent rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">📞</div>
+      <h1 class="text-xl font-bold text-white">Agent Sign In</h1>
+      <p class="text-sm text-gray-400 mt-1">Call Center Agent Panel</p>
+    </div>
+    <div class="space-y-4">
+      <div>
+        <label class="text-xs text-gray-400 block mb-1.5">Username</label>
+        <input id="login-username" type="text" placeholder="admin"
+          class="w-full bg-issabel-dark border border-gray-600 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-issabel-accent transition-colors">
+      </div>
+      <div>
+        <label class="text-xs text-gray-400 block mb-1.5">Password</label>
+        <input id="login-password" type="password" placeholder="••••••"
+          class="w-full bg-issabel-dark border border-gray-600 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-issabel-accent transition-colors"
+          onkeydown="if(event.key==='Enter') doLogin()">
+      </div>
+      <div id="login-error" class="hidden text-xs text-red-400 bg-red-900/30 px-3 py-2 rounded-lg">Invalid username or password</div>
+      <button onclick="doLogin()"
+        class="w-full bg-issabel-accent hover:bg-orange-600 text-white font-medium py-3 rounded-xl text-sm transition-colors">
+        Sign In →
+      </button>
+    </div>
+  </div>
 </div>
 
-<div class="card d-none" id="dashboard-view">
-    <h3>Agent Dashboard</h3>
-    <p class="text-success fw-bold">🟢 Online & Waiting</p>
-    <div id="incoming-call-box" class="d-none mt-4 p-3 bg-light rounded ringing">
-        <h5 class="text-danger">🚨 Incoming Transfer!</h5>
-        <p id="call-room-name" class="fw-bold"></p>
-        <button class="btn btn-success w-100 py-2 fs-5" onclick="answerCall()">Answer Call</button>
+<!-- ── DASHBOARD SCREEN ──────────────────────────────────────────────────── -->
+<div id="dashboard-screen" class="hidden flex-1 flex flex-col">
+
+  <!-- ── WAITING STATE ── -->
+  <div id="state-waiting" class="flex-1 flex flex-col items-center justify-center p-8">
+    <div class="text-center slide-in">
+      <div class="w-24 h-24 rounded-full bg-issabel-mid border-2 border-green-600 flex items-center justify-center text-4xl mx-auto mb-6 animate-pulse">🎧</div>
+      <h2 class="text-2xl font-bold text-white mb-2">Waiting for Calls</h2>
+      <p class="text-gray-400 text-sm">You are online and ready to receive transfers</p>
+      <div class="mt-6 flex items-center justify-center gap-2">
+        <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+        <span class="text-green-400 text-sm font-medium">Online & Ready</span>
+      </div>
+      <!-- Queue stats -->
+      <div class="mt-8 flex gap-6 justify-center">
+        <div class="text-center">
+          <div id="wait-active" class="text-2xl font-bold text-issabel-accent">0</div>
+          <div class="text-xs text-gray-500 mt-0.5">Active Calls</div>
+        </div>
+        <div class="w-px bg-gray-700"></div>
+        <div class="text-center">
+          <div id="wait-agents" class="text-2xl font-bold text-issabel-blue">0</div>
+          <div class="text-xs text-gray-500 mt-0.5">Online Agents</div>
+        </div>
+      </div>
     </div>
-    <div id="active-call-box" class="d-none mt-4 p-3 bg-success text-white rounded">
-        <h5>🎙️ Active Call</h5>
-        <p id="active-room-name"></p>
-        <button class="btn btn-danger w-100 py-2" onclick="endCall()">End Call</button>
+  </div>
+
+  <!-- ── INCOMING CALL STATE ── -->
+  <div id="state-incoming" class="hidden flex-1 flex flex-col items-center justify-center p-8">
+    <div class="text-center slide-in">
+      <div class="w-28 h-28 rounded-full bg-issabel-red flex items-center justify-center text-5xl mx-auto mb-6 pulse-ring">📲</div>
+      <h2 class="text-2xl font-bold text-white mb-1">Incoming Transfer!</h2>
+      <p id="incoming-room" class="text-gray-400 text-sm mb-8">Customer is waiting...</p>
+      <div class="flex gap-4">
+        <button onclick="answerCall()"
+          class="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white font-bold px-8 py-4 rounded-2xl text-lg transition-all shadow-lg hover:shadow-green-500/30">
+          📞 Answer
+        </button>
+        <button onclick="declineCall()"
+          class="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-gray-300 font-medium px-6 py-4 rounded-2xl text-sm transition-colors">
+          ✕ Decline
+        </button>
+      </div>
     </div>
+  </div>
+
+  <!-- ── IN CALL STATE ── -->
+  <div id="state-in-call" class="hidden flex-1 flex flex-col p-6 gap-4">
+    <div class="bg-issabel-mid rounded-2xl p-6 border border-red-800 slide-in">
+      <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-full bg-red-900 flex items-center justify-center text-xl">👤</div>
+          <div>
+            <div class="text-white font-semibold" id="call-caller-id">SIP Caller</div>
+            <div class="text-xs text-gray-400" id="call-room-display">—</div>
+          </div>
+        </div>
+        <div class="text-right">
+          <div id="call-timer" class="text-3xl font-mono font-bold text-issabel-accent">00:00</div>
+          <div class="text-xs text-gray-500 mt-0.5 flex items-center gap-1 justify-end">
+            <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block"></span>
+            On Call
+          </div>
+        </div>
+      </div>
+
+      <!-- Call Controls -->
+      <div class="flex gap-3 flex-wrap">
+        <button id="mute-btn" onclick="toggleMute()"
+          class="flex-1 flex items-center justify-center gap-2 bg-issabel-light hover:bg-gray-600 text-white py-3 rounded-xl text-sm transition-colors">
+          🎙 Mute
+        </button>
+        <button onclick="endCurrentCall()"
+          class="flex-1 flex items-center justify-center gap-2 bg-red-700 hover:bg-red-600 text-white font-bold py-3 rounded-xl text-sm transition-colors shadow-lg hover:shadow-red-500/30">
+          📵 End Call
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── BREAK STATE ── -->
+  <div id="state-break" class="hidden flex-1 flex flex-col items-center justify-center p-8">
+    <div class="text-center slide-in">
+      <div class="text-6xl mb-6">☕</div>
+      <h2 class="text-2xl font-bold text-white mb-2">On Break</h2>
+      <p class="text-gray-400 text-sm mb-8">You won't receive calls during break</p>
+      <button onclick="changeStatus('Available')"
+        class="bg-green-600 hover:bg-green-500 text-white font-medium px-8 py-3 rounded-xl text-sm transition-colors">
+        ✓ Go Available
+      </button>
+    </div>
+  </div>
+
+  <!-- ── CALL HISTORY ── -->
+  <div class="bg-issabel-mid border-t border-gray-700 p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Today's Calls</h3>
+      <span id="today-count" class="text-xs text-gray-500">0 calls</span>
+    </div>
+    <div id="call-history" class="space-y-2 max-h-40 overflow-y-auto">
+      <div class="text-xs text-gray-600 text-center py-3">No calls yet today</div>
+    </div>
+  </div>
 </div>
 
-<div id="audio-container"></div>
+<audio id="agent-audio" autoplay></audio>
 
 <script>
-    let currentRoomName = null;
-    let room = null;
-    let connection = null;
+// ── STATE ──────────────────────────────────────────────────────────────────
+let agentUsername = null;
+let agentId = null;
+let currentRoomName = null;
+let liveRoom = null;
+let callStartTime = null;
+let callTimerInterval = null;
+let isMuted = false;
+let loginTime = null;
+let uptimeInterval = null;
+let todayCalls = [];
 
-    async function login() {
-        const user = document.getElementById('username').value;
-        const pass = document.getElementById('password').value;
-        const res = await fetch('/api/agent/login', {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({username: user, password: pass})
-        });
-        if(res.ok) {
-            document.getElementById('login-view').classList.add('d-none');
-            document.getElementById('dashboard-view').classList.remove('d-none');
-            setupSignalR(user);
-        } else {
-            alert('Login failed');
-        }
+// ── SIGNALR ────────────────────────────────────────────────────────────────
+const connection = new signalR.HubConnectionBuilder()
+  .withUrl('/hubs/call')
+  .withAutomaticReconnect()
+  .build();
+
+connection.on('IncomingTransfer', (roomName) => {
+  currentRoomName = roomName;
+  document.getElementById('incoming-room').textContent = 'Room: ' + roomName;
+  showState('incoming');
+  playRing();
+});
+
+connection.on('QueueUpdate', (data) => {
+  document.getElementById('wait-active').textContent = data.activeCount || 0;
+  document.getElementById('wait-agents').textContent = data.agentsOnline || 0;
+});
+
+connection.on('AgentStatusChanged', (username, status) => {
+  if (username === agentUsername) updateStatusSelector(status);
+});
+
+connection.onreconnected(async () => {
+  document.getElementById('signal-dot').className = 'w-2 h-2 rounded-full bg-green-500';
+  if (agentUsername) await connection.invoke('RegisterAgent', agentUsername);
+});
+connection.onclose(() => {
+  document.getElementById('signal-dot').className = 'w-2 h-2 rounded-full bg-red-500';
+});
+
+// ── LOGIN ──────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  if (!username || !password) return;
+
+  const res = await fetch('/api/agent/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+
+  if (!res.ok) {
+    document.getElementById('login-error').classList.remove('hidden');
+    return;
+  }
+  const data = await res.json();
+  agentUsername = data.username;
+  agentId = data.id;
+
+  // Start SignalR
+  await connection.start();
+  document.getElementById('signal-dot').className = 'w-2 h-2 rounded-full bg-green-500';
+  await connection.invoke('RegisterAgent', agentUsername);
+
+  // Set available status
+  await setStatus('Available');
+
+  // Show dashboard
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('dashboard-screen').classList.remove('hidden');
+  document.getElementById('dashboard-screen').classList.add('flex');
+  document.getElementById('agent-info-bar').classList.remove('hidden');
+  document.getElementById('agent-info-bar').classList.add('flex');
+  document.getElementById('agent-name-bar').textContent = agentUsername;
+
+  // Start uptime counter
+  loginTime = Date.now();
+  uptimeInterval = setInterval(updateUptime, 1000);
+
+  // Load history
+  loadTodayHistory();
+  connection.onreconnected(async () => {
+    await connection.invoke('RegisterAgent', agentUsername);
+  });
+}
+
+function updateUptime() {
+  const s = Math.floor((Date.now() - loginTime) / 1000);
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+  document.getElementById('agent-uptime').textContent =
+    `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+// ── STATUS ─────────────────────────────────────────────────────────────────
+async function changeStatus(status) {
+  await setStatus(status);
+}
+
+async function setStatus(status) {
+  await fetch('/api/agent/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: agentUsername, status })
+  });
+  updateStatusSelector(status);
+  if (status === 'Break' || status === 'NotReady') showState('break');
+  else if (status === 'Available') showState('waiting');
+}
+
+function updateStatusSelector(status) {
+  const sel = document.getElementById('status-select');
+  if (sel) sel.value = status;
+}
+
+// ── STATES ─────────────────────────────────────────────────────────────────
+function showState(state) {
+  ['waiting','incoming','in-call','break'].forEach(s => {
+    document.getElementById('state-' + s).classList.add('hidden');
+  });
+  document.getElementById('state-' + state).classList.remove('hidden');
+}
+
+// ── ANSWER CALL ─────────────────────────────────────────────────────────────
+async function answerCall() {
+  stopRing();
+  showState('in-call');
+  document.getElementById('call-room-display').textContent = currentRoomName;
+
+  // Connect to LiveKit room
+  const tokenRes = await fetch(`/api/token?identity=agent_${agentUsername}_${Date.now()}&room=${currentRoomName}`);
+  const tokenData = await tokenRes.json();
+
+  liveRoom = new LivekitClient.Room();
+  liveRoom.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
+    if (track.kind === 'audio') track.attach(document.getElementById('agent-audio'));
+  });
+  liveRoom.on(LivekitClient.RoomEvent.ParticipantDisconnected, (participant) => {
+    if (participant.identity.startsWith('sip') || participant.identity.includes('SIP')) {
+      endCurrentCall();
     }
+  });
 
-    function setupSignalR(username) {
-        connection = new signalR.HubConnectionBuilder()
-            .withUrl(`/hubs/call?username=${username}`)
-            .withAutomaticReconnect()
-            .build();
+  await liveRoom.connect(tokenData.url, tokenData.token);
+  await liveRoom.localParticipant.setMicrophoneEnabled(true);
 
-        connection.on("IncomingTransfer", (roomName) => {
-            currentRoomName = roomName;
-            document.getElementById('call-room-name').innerText = roomName;
-            document.getElementById('incoming-call-box').classList.remove('d-none');
-        });
+  // Start call timer
+  callStartTime = Date.now();
+  callTimerInterval = setInterval(updateCallTimer, 1000);
+}
 
-        connection.start().then(() => console.log('SignalR Connected')).catch(err => console.error(err));
-    }
+function declineCall() {
+  stopRing();
+  currentRoomName = null;
+  showState('waiting');
+}
 
-    async function answerCall() {
-        document.getElementById('incoming-call-box').classList.add('d-none');
-        document.getElementById('active-call-box').classList.remove('d-none');
-        document.getElementById('active-room-name').innerText = currentRoomName;
+// ── END CALL ─────────────────────────────────────────────────────────────────
+async function endCurrentCall() {
+  if (callTimerInterval) { clearInterval(callTimerInterval); callTimerInterval = null; }
 
-        const user = document.getElementById('username').value;
-        const res = await fetch(`/api/token?identity=agent_${user}&room=${currentRoomName}`);
-        const data = await res.json();
+  if (liveRoom) { await liveRoom.disconnect(); liveRoom = null; }
+  if (currentRoomName) {
+    await fetch(`/api/calls/${currentRoomName}/end`, { method: 'POST' });
+  }
 
-        room = new LivekitClient.Room();
-        
-        room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
-            if (track.kind === 'audio') {
-                const element = track.attach();
-                document.getElementById('audio-container').appendChild(element);
-            }
-        });
+  // Add to today's history
+  if (currentRoomName && callStartTime) {
+    const dur = Math.floor((Date.now() - callStartTime) / 1000);
+    todayCalls.unshift({ room: currentRoomName, duration: dur, time: new Date() });
+    renderHistory();
+  }
 
-        room.on(LivekitClient.RoomEvent.ParticipantDisconnected, (participant) => {
-            // If the SIP caller (or anyone not the AI/agent) leaves, end the call
-            if (participant.identity.startsWith('sip')) {
-                console.log('Caller left, ending call automatically');
-                endCall();
-            }
-        });
+  currentRoomName = null;
+  callStartTime = null;
+  document.getElementById('call-timer').textContent = '00:00';
+  isMuted = false;
+  document.getElementById('mute-btn').textContent = '🎙 Mute';
 
-        await room.connect(data.url, data.token);
-        await room.localParticipant.setMicrophoneEnabled(true);
-    }
+  await setStatus('Available');
+  showState('waiting');
+}
 
-    async function endCall() {
-        if(room) {
-            room.disconnect();
-            room = null;
-        }
-        document.getElementById('active-call-box').classList.add('d-none');
-        const rName = currentRoomName;
-        currentRoomName = null;
-        await fetch(`/api/calls/${rName}/end`, { method: 'POST' });
-    }
+// ── MUTE ─────────────────────────────────────────────────────────────────────
+function toggleMute() {
+  isMuted = !isMuted;
+  if (liveRoom) liveRoom.localParticipant.setMicrophoneEnabled(!isMuted);
+  document.getElementById('mute-btn').textContent = isMuted ? '🔇 Unmute' : '🎙 Mute';
+  document.getElementById('mute-btn').className = `flex-1 flex items-center justify-center gap-2 ${isMuted ? 'bg-red-900 text-red-300' : 'bg-issabel-light text-white'} py-3 rounded-xl text-sm transition-colors hover:bg-gray-600`;
+}
+
+// ── TIMER ─────────────────────────────────────────────────────────────────────
+function updateCallTimer() {
+  const s = Math.floor((Date.now() - callStartTime) / 1000);
+  const m = Math.floor(s/60), sec = s%60;
+  document.getElementById('call-timer').textContent =
+    `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+// ── HISTORY ───────────────────────────────────────────────────────────────────
+async function loadTodayHistory() {
+  const res = await fetch('/api/calls');
+  const all = await res.json();
+  const today = new Date().toDateString();
+  todayCalls = all
+    .filter(c => new Date(c.startTime).toDateString() === today && c.handledByAgentId == agentId)
+    .map(c => ({
+      room: c.roomName,
+      duration: c.endTime ? Math.floor((new Date(c.endTime)-new Date(c.startTime))/1000) : null,
+      time: new Date(c.startTime)
+    }));
+  renderHistory();
+}
+
+function renderHistory() {
+  const hist = document.getElementById('call-history');
+  document.getElementById('today-count').textContent = `${todayCalls.length} call${todayCalls.length !== 1 ? 's' : ''}`;
+  if (todayCalls.length === 0) {
+    hist.innerHTML = '<div class="text-xs text-gray-600 text-center py-3">No calls yet today</div>';
+    return;
+  }
+  hist.innerHTML = todayCalls.map(c => `
+    <div class="flex items-center justify-between bg-issabel-dark rounded-lg px-3 py-2">
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-gray-500">📞</span>
+        <span class="text-xs text-gray-300 font-mono">${c.room.split('_').slice(-1)[0]}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="text-xs text-gray-500">${c.time.toLocaleTimeString()}</span>
+        ${c.duration !== null ? `<span class="text-xs font-mono text-issabel-accent">${formatDur(c.duration)}</span>` : '<span class="text-xs text-green-400">Active</span>'}
+      </div>
+    </div>`).join('');
+}
+
+// ── RING ───────────────────────────────────────────────────────────────────────
+let ringInterval = null;
+function playRing() {
+  // Simple visual + browser notification
+  if (Notification.permission === 'granted') {
+    new Notification('📞 Incoming Call Transfer!', { body: 'A customer is waiting for you.' });
+  } else if (Notification.permission !== 'denied') {
+    Notification.requestPermission();
+  }
+  // Flash the tab title
+  let toggled = false;
+  ringInterval = setInterval(() => {
+    document.title = toggled ? '📞 INCOMING CALL!' : 'Agent Panel';
+    toggled = !toggled;
+  }, 600);
+}
+function stopRing() {
+  if (ringInterval) { clearInterval(ringInterval); ringInterval = null; }
+  document.title = 'Agent Panel';
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function formatDur(s) {
+  const m = Math.floor(s/60), sec = s%60;
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
 </script>
-
 </body>
 </html>
