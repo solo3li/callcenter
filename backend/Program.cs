@@ -41,7 +41,9 @@ using (var scope = app.Services.CreateScope())
 
 app.UseCors();
 app.UseDefaultFiles();
-app.UseStaticFiles();
+var provider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+provider.Mappings[".ogg"] = "audio/ogg";
+app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = provider });
 
 // Token generation for LiveKit
 app.MapGet("/api/token", async (string identity = null, string? room = null, AppDbContext db = null) => {

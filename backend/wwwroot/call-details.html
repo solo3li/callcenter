@@ -62,11 +62,11 @@
                     html += `
                         <hr>
                         <h5>🎙️ Recording</h5>
-                        <video controls style="width: 100%; max-height: 200px;" class="mb-3">
-                            <source src="${call.recordingUrl}" type="video/webm">
-                            Your browser does not support the video tag.
-                        </video>
-                        <a href="${call.recordingUrl}" target="_blank" class="btn btn-sm btn-outline-primary">Download File</a>
+                        <audio controls style="width: 100%;" class="mb-3">
+                            <source src="${call.recordingUrl}" type="audio/ogg">
+                            Your browser does not support the audio tag.
+                        </audio>
+                        <a href="${call.recordingUrl}" target="_blank" class="btn btn-sm btn-outline-primary">Download Audio</a>
                     `;
                 }
 
