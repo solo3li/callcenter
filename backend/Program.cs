@@ -84,7 +84,7 @@ app.MapGet("/api/token", async (string identity = null, string? room = null, App
     {
         var existing = await db.Calls.FirstOrDefaultAsync(c => c.RoomName == roomName);
         if (existing == null) {
-            db.Calls.Add(new CallRecord { RoomName = roomName, CallerId = identity, Status = "Active", RecordingUrl = $"http://localhost:9000/recordings/{roomName}.mp4" });
+            db.Calls.Add(new CallRecord { RoomName = roomName, CallerId = identity, Status = "Active", RecordingUrl = $"/recordings/{roomName}.mp4" });
             await db.SaveChangesAsync();
             _ = StartRecording(roomName);
         }
@@ -123,22 +123,16 @@ async Task StartRecording(string roomName) {
     var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
     var exp = DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds();
     var payload = new Dictionary<string, object> {
-        { "iss", apiKey }, { "nbf", now }, { "exp", exp },
-        { "video", new Dictionary<string, object> { { "roomAdmin", true }, { "room", roomName } } }
+        { "iss", apiKey }, { "sub", apiKey }, { "nbf", now }, { "exp", exp },
+        { "video", new Dictionary<string, object> { { "roomAdmin", true }, { "room", roomName }, { "roomRecord", true } } }
     };
     var token = JWT.Encode(payload, Encoding.UTF8.GetBytes(apiSecret), JwsAlgorithm.HS256);
     
     var reqBody = new {
         room_name = roomName,
+        audio_only = true,
         file = new {
-            filepath = $"{roomName}.mp4",
-            s3 = new {
-                access_key = "admin",
-                secret = "adminpassword",
-                endpoint = "http://minio:9000",
-                bucket = "recordings",
-                force_path_style = true
-            }
+            filepath = $"/recordings/{roomName}.mp4"
         }
     };
 
@@ -147,17 +141,32 @@ async Task StartRecording(string roomName) {
     var content = new StringContent(JsonSerializer.Serialize(reqBody), Encoding.UTF8, "application/json");
     try {
         var host = Environment.GetEnvironmentVariable("LIVEKIT_URL") ?? "http://livekit:7880";
-        await client.PostAsync($"{host}/twirp/livekit.Egress/StartRoomCompositeEgress", content);
-    } catch {}
+        var resp = await client.PostAsync($"{host}/twirp/livekit.Egress/StartRoomCompositeEgress", content);
+        var resBody = await resp.Content.ReadAsStringAsync();
+        Console.WriteLine($"Egress Start Response: {resp.StatusCode} - {resBody}");
+    } catch (Exception ex) {
+        Console.WriteLine($"Egress Exception: {ex.Message}");
+    }
 }
 
 // Register active call (called by Python AI Worker for SIP calls)
 app.MapPost("/api/call/active", async (TransferDto req, AppDbContext db) => {
     var existing = await db.Calls.FirstOrDefaultAsync(c => c.RoomName == req.RoomName);
     if (existing == null) {
-        db.Calls.Add(new CallRecord { RoomName = req.RoomName, CallerId = "SIP Caller", Status = "Active", RecordingUrl = $"http://localhost:9000/recordings/{req.RoomName}.mp4" });
+        db.Calls.Add(new CallRecord { RoomName = req.RoomName, CallerId = "SIP Caller", Status = "Active", RecordingUrl = $"/recordings/{req.RoomName}.mp4" });
         await db.SaveChangesAsync();
         _ = StartRecording(req.RoomName);
+    }
+    return Results.Ok();
+});
+
+// End call (called by Python AI Worker when user disconnects)
+app.MapPost("/api/call/end", async (TransferDto req, AppDbContext db) => {
+    var call = await db.Calls.OrderByDescending(c => c.Id).FirstOrDefaultAsync(c => c.RoomName == req.RoomName);
+    if (call != null && call.Status == "Active") {
+        call.Status = "Completed";
+        call.EndTime = DateTime.UtcNow;
+        await db.SaveChangesAsync();
     }
     return Results.Ok();
 });
@@ -189,22 +198,49 @@ app.MapDelete("/api/calls/{roomName}", async (string roomName, AppDbContext db) 
 
     var apiKey = Environment.GetEnvironmentVariable("LIVEKIT_API_KEY") ?? "devkey";
     var apiSecret = Environment.GetEnvironmentVariable("LIVEKIT_API_SECRET") ?? "secret";
-    var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-    var exp = DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds();
-    var payload = new Dictionary<string, object> {
-        { "iss", apiKey }, { "nbf", now }, { "exp", exp },
+    var token = JWT.Encode(new Dictionary<string, object> {
+        { "iss", apiKey }, { "sub", apiKey }, { "nbf", DateTimeOffset.UtcNow.ToUnixTimeSeconds() }, { "exp", DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds() },
         { "video", new Dictionary<string, object> { { "roomAdmin", true }, { "room", roomName } } }
-    };
-    var token = JWT.Encode(payload, Encoding.UTF8.GetBytes(apiSecret), JwsAlgorithm.HS256);
+    }, Encoding.UTF8.GetBytes(apiSecret), JwsAlgorithm.HS256);
     
     using var client = new HttpClient();
     client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-    var content = new StringContent($"{{\"room\":\"{roomName}\"}}", Encoding.UTF8, "application/json");
-    try {
-        var host = app.Configuration["LIVEKIT_URL"] ?? "http://livekit:7880";
-        await client.PostAsync($"{host}/twirp/livekit.RoomService/DeleteRoom", content);
-    } catch {}
+    try { 
+        var resp = await client.PostAsync($"{Environment.GetEnvironmentVariable("LIVEKIT_URL") ?? "http://livekit:7880"}/twirp/livekit.RoomService/DeleteRoom", new StringContent($"{{\"room\":\"{roomName}\"}}", Encoding.UTF8, "application/json")); 
+        var body = await resp.Content.ReadAsStringAsync();
+        Console.WriteLine($"Twirp DeleteRoom Response (DELETE): {resp.StatusCode} - {body}");
+    } catch (Exception e) {
+        Console.WriteLine($"Twirp Error: {e.Message}");
+    }
+    return Results.Ok();
+});
 
+// Force end a call without deleting it
+app.MapPost("/api/calls/{roomName}/end", async (string roomName, AppDbContext db) => {
+    var call = await db.Calls.FirstOrDefaultAsync(c => c.RoomName == roomName);
+    if (call != null && call.Status == "Active") {
+        call.Status = "Completed";
+        call.EndTime = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+    }
+
+    var apiKey = Environment.GetEnvironmentVariable("LIVEKIT_API_KEY") ?? "devkey";
+    var apiSecret = Environment.GetEnvironmentVariable("LIVEKIT_API_SECRET") ?? "secret";
+    var token = JWT.Encode(new Dictionary<string, object> {
+        { "iss", apiKey }, { "sub", apiKey }, { "nbf", DateTimeOffset.UtcNow.ToUnixTimeSeconds() }, { "exp", DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds() },
+        { "video", new Dictionary<string, object> { { "roomAdmin", true }, { "room", roomName } } }
+    }, Encoding.UTF8.GetBytes(apiSecret), JwsAlgorithm.HS256);
+    
+    using var client = new HttpClient();
+    client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+    try { 
+        var resp = await client.PostAsync($"{Environment.GetEnvironmentVariable("LIVEKIT_URL") ?? "http://livekit:7880"}/twirp/livekit.RoomService/DeleteRoom", new StringContent($"{{\"room\":\"{roomName}\"}}", Encoding.UTF8, "application/json")); 
+        var body = await resp.Content.ReadAsStringAsync();
+        Console.WriteLine($"Twirp DeleteRoom Response: {resp.StatusCode} - {body}");
+    } catch (Exception e) {
+        Console.WriteLine($"Twirp Error: {e.Message}");
+    }
+    
     return Results.Ok();
 });
 

@@ -92,14 +92,14 @@
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${call.id}</td>
-                    <td>${call.roomName}</td>
+                    <td><a href="call-details.html?roomName=${call.roomName}">${call.roomName}</a></td>
                     <td>${new Date(call.startTime).toLocaleString()}</td>
-                    <td><span class="badge bg-${call.status === 'Active' || !call.endTime ? 'success' : 'secondary'}">${call.status || (call.endTime ? 'Completed' : 'Active')}</span></td>
+                    <td><span class="badge ${call.status === 'Active' ? 'bg-success' : 'bg-secondary'}">${call.status || (call.endTime ? 'Completed' : 'Active')}</span></td>
                     <td>${call.handledByAgentId || 'AI Only'}</td>
                     <td>
                         ${!call.endTime ? `<button class="btn btn-sm btn-warning" onclick="monitorCall('${call.roomName}')">Listen Live</button>` : ''}
-                        ${call.summary ? `<button class="btn btn-sm btn-info" onclick="showSummary('${call.summary.replace(/'/g, "\\'")}')">Summary</button>` : ''}
-                        ${call.recordingUrl ? `<button class="btn btn-sm btn-success ms-1" onclick="playRecording('${call.recordingUrl}')">Recording</button>` : ''}
+                        ${!call.endTime ? `<button class="btn btn-sm btn-dark ms-1" onclick="forceEndCall('${call.roomName}')">End Call</button>` : ''}
+                        <a href="call-details.html?roomName=${call.roomName}" class="btn btn-sm btn-primary ms-1">Details</a>
                         <button class="btn btn-sm btn-danger ms-1" onclick="deleteCall('${call.roomName}')">Delete</button>
                     </td>
                 `;
@@ -153,6 +153,13 @@
         async function deleteCall(roomName) {
             if(confirm('Are you sure you want to end and delete this room?')) {
                 await fetch('/api/calls/' + roomName, { method: 'DELETE' });
+                fetchCalls();
+            }
+        }
+
+        async function forceEndCall(roomName) {
+            if(confirm('Are you sure you want to end this call?')) {
+                await fetch('/api/calls/' + roomName + '/end', { method: 'POST' });
                 fetchCalls();
             }
         }

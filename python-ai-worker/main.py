@@ -55,6 +55,17 @@ async def entrypoint(ctx: JobContext):
     agent = Agent(instructions=instructions)
     session = AgentSession(llm=model, tools=[transfer_to_human])
     
+    @ctx.room.on("participant_disconnected")
+    def on_participant_disconnected(participant):
+        logger.info(f"Participant {participant.identity} left, marking call as ended.")
+        async def mark_ended():
+            async with aiohttp.ClientSession() as http_session:
+                try:
+                    await http_session.post("http://backend:5000/api/call/end", json={"RoomName": ctx.room.name})
+                except Exception as e:
+                    logger.warning(f"Failed to end call: {e}")
+        asyncio.create_task(mark_ended())
+
     await session.start(agent, room=ctx.room)
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
 
