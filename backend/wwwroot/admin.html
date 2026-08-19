@@ -198,8 +198,8 @@
                     <tr>
                         <td><strong>${a.username}</strong></td>
                         <td>
-                            <span class="badge bg-${a.isOnline ? 'success' : 'secondary'}">
-                                ${a.isOnline ? '🟢 Online' : '⚪ Offline'}
+                            <span class="badge bg-${a.status === 'Available' ? 'success' : (a.status === 'In Call' ? 'danger' : 'secondary')}">
+                                ${a.status === 'Available' ? '🟢 Available' : (a.status === 'In Call' ? '🔴 In Call' : '⚪ Offline')}
                             </span>
                         </td>
                     </tr>

@@ -265,7 +265,14 @@ app.MapPost("/api/calls/{roomName}/end", async (string roomName, AppDbContext db
 
 app.MapGet("/api/agents", async (AppDbContext db) => {
     var agents = await db.Agents.Select(a => new { a.Id, a.Username, a.IsOnline }).ToListAsync();
-    return Results.Ok(agents);
+    var activeCalls = await db.Calls.Where(c => c.Status == "Transferred" && c.HandledByAgentId != null).ToListAsync();
+    
+    var result = agents.Select(a => {
+        bool isInCall = activeCalls.Any(c => c.HandledByAgentId == a.Id);
+        string status = !a.IsOnline ? "Offline" : (isInCall ? "In Call" : "Available");
+        return new { a.Id, a.Username, Status = status };
+    });
+    return Results.Ok(result);
 });
 
 app.MapHub<CallHub>("/hubs/call");
