@@ -31,9 +31,20 @@ namespace backend.Hubs
             await base.OnConnectedAsync();
         }
 
+        public async Task RegisterAgent(string username)
+        {
+            var agent = await _db.Agents.FirstOrDefaultAsync(a => a.Username == username);
+            if (agent != null)
+            {
+                agent.IsOnline = true;
+                Context.Items["Username"] = username;
+                await _db.SaveChangesAsync();
+            }
+        }
+
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
-            var username = Context.GetHttpContext()?.Request.Query["username"].ToString();
+            var username = Context.Items["Username"] as string;
             if (!string.IsNullOrEmpty(username))
             {
                 var agent = await _db.Agents.FirstOrDefaultAsync(a => a.Username == username);
