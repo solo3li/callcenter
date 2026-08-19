@@ -118,9 +118,15 @@ app.MapPost("/api/call/transfer", async (TransferDto req, AppDbContext db, IHubC
     var availableAgent = await db.Agents.FirstOrDefaultAsync(a => a.IsOnline);
     if (availableAgent == null) return Results.BadRequest("No agents available");
 
-    // Create a call record
-    var call = new CallRecord { RoomName = req.RoomName, HandledByAgentId = availableAgent.Id, Status = "Transferred" };
-    db.Calls.Add(call);
+    // Update the existing call record
+    var call = await db.Calls.OrderByDescending(c => c.Id).FirstOrDefaultAsync(c => c.RoomName == req.RoomName);
+    if (call != null) {
+        call.HandledByAgentId = availableAgent.Id;
+        call.Status = "Transferred";
+    } else {
+        call = new CallRecord { RoomName = req.RoomName, HandledByAgentId = availableAgent.Id, Status = "Transferred" };
+        db.Calls.Add(call);
+    }
     await db.SaveChangesAsync();
 
     // Alert the agent via SignalR
@@ -213,7 +219,7 @@ app.MapDelete("/api/calls/{roomName}", async (string roomName, AppDbContext db) 
     var apiSecret = Environment.GetEnvironmentVariable("LIVEKIT_API_SECRET") ?? "secret";
     var token = JWT.Encode(new Dictionary<string, object> {
         { "iss", apiKey }, { "sub", apiKey }, { "nbf", DateTimeOffset.UtcNow.ToUnixTimeSeconds() }, { "exp", DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds() },
-        { "video", new Dictionary<string, object> { { "roomAdmin", true }, { "room", roomName } } }
+        { "video", new Dictionary<string, object> { { "roomCreate", true }, { "roomAdmin", true }, { "room", roomName } } }
     }, Encoding.UTF8.GetBytes(apiSecret), JwsAlgorithm.HS256);
     
     using var client = new HttpClient();
@@ -230,8 +236,8 @@ app.MapDelete("/api/calls/{roomName}", async (string roomName, AppDbContext db) 
 
 // Force end a call without deleting it
 app.MapPost("/api/calls/{roomName}/end", async (string roomName, AppDbContext db) => {
-    var call = await db.Calls.FirstOrDefaultAsync(c => c.RoomName == roomName);
-    if (call != null && call.Status == "Active") {
+    var call = await db.Calls.OrderByDescending(c => c.Id).FirstOrDefaultAsync(c => c.RoomName == roomName);
+    if (call != null && (call.Status == "Active" || call.Status == "Transferred")) {
         call.Status = "Completed";
         call.EndTime = DateTime.UtcNow;
         await db.SaveChangesAsync();
@@ -241,7 +247,7 @@ app.MapPost("/api/calls/{roomName}/end", async (string roomName, AppDbContext db
     var apiSecret = Environment.GetEnvironmentVariable("LIVEKIT_API_SECRET") ?? "secret";
     var token = JWT.Encode(new Dictionary<string, object> {
         { "iss", apiKey }, { "sub", apiKey }, { "nbf", DateTimeOffset.UtcNow.ToUnixTimeSeconds() }, { "exp", DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds() },
-        { "video", new Dictionary<string, object> { { "roomAdmin", true }, { "room", roomName } } }
+        { "video", new Dictionary<string, object> { { "roomCreate", true }, { "roomAdmin", true }, { "room", roomName } } }
     }, Encoding.UTF8.GetBytes(apiSecret), JwsAlgorithm.HS256);
     
     using var client = new HttpClient();
