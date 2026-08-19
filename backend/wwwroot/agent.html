@@ -95,6 +95,14 @@
             }
         });
 
+        room.on(LivekitClient.RoomEvent.ParticipantDisconnected, (participant) => {
+            // If the SIP caller (or anyone not the AI/agent) leaves, end the call
+            if (participant.identity.startsWith('sip')) {
+                console.log('Caller left, ending call automatically');
+                endCall();
+            }
+        });
+
         await room.connect(data.url, data.token);
         await room.localParticipant.setMicrophoneEnabled(true);
     }

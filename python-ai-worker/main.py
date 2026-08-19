@@ -32,30 +32,39 @@ async def entrypoint(ctx: JobContext):
 وظيفتك استقبال الطلبات والمساعدة.
 إذا طلب العميل التحدث مع موظف بشري (خدمة العملاء الحقيقية)، استخدمي أداة transfer_to_human فوراً وقولي له أنه سيتم تحويله."""
 
+    transfer_in_progress = False
+
     @llm.function_tool(description="تحويل المكالمة إلى موظف بشري عند طلب العميل")
     async def transfer_to_human(reason: str = ""):
+        nonlocal transfer_in_progress
         logger.info(f"Transferring call in room {ctx.room.name} to human. Reason: {reason}")
         async with aiohttp.ClientSession() as http_session:
             try:
                 async with http_session.post("http://backend:5000/api/call/transfer", json={"RoomName": ctx.room.name}) as resp:
                     if resp.status == 200:
-                        asyncio.create_task(leave_room_soon(ctx, session))
-                        return "تم إرسال الطلب للموظف بنجاح."
+                        transfer_in_progress = True
+                        return "جاري الاتصال بالموظف، يرجى البقاء معي على الخط لحظات..."
                     else:
                         return "عفواً، لا يوجد موظفين متاحين الآن، هل يمكنني مساعدتك في شيء آخر؟"
             except Exception as e:
                 logger.error(f"Failed to transfer: {e}")
                 return "عذراً، حدث خطأ أثناء التحويل."
 
-    async def leave_room_soon(ctx_local, session_local):
-        # Disable AI's listening immediately to prevent Gemini crash on multiple audio streams
-        await asyncio.sleep(4)
-        await ctx_local.room.disconnect()
-
     # Pass tools to AgentSession directly, and use the regular Agent
     agent = Agent(instructions=instructions)
     session = AgentSession(llm=model, tools=[transfer_to_human])
     
+    @ctx.room.on("participant_connected")
+    def on_participant_connected(participant):
+        nonlocal transfer_in_progress
+        logger.info(f"Participant {participant.identity} connected.")
+        if transfer_in_progress and participant.identity.startswith("agent_"):
+            logger.info("Human agent joined! AI is leaving the room gracefully.")
+            async def leave_now():
+                await asyncio.sleep(0.5)
+                await ctx.room.disconnect()
+            asyncio.create_task(leave_now())
+
     @ctx.room.on("participant_disconnected")
     def on_participant_disconnected(participant):
         logger.info(f"Participant {participant.identity} left, marking call as ended.")
