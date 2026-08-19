@@ -132,7 +132,7 @@ async Task StartRecording(string roomName) {
         room_name = roomName,
         audio_only = true,
         file = new {
-            filepath = $"/recordings/{roomName}.mp4"
+            filepath = $"/recordings/{roomName}.ogg"
         }
     };
 
@@ -153,7 +153,7 @@ async Task StartRecording(string roomName) {
 app.MapPost("/api/call/active", async (TransferDto req, AppDbContext db) => {
     var existing = await db.Calls.FirstOrDefaultAsync(c => c.RoomName == req.RoomName);
     if (existing == null) {
-        db.Calls.Add(new CallRecord { RoomName = req.RoomName, CallerId = "SIP Caller", Status = "Active", RecordingUrl = $"/recordings/{req.RoomName}.mp4" });
+        db.Calls.Add(new CallRecord { RoomName = req.RoomName, CallerId = "SIP Caller", Status = "Active", RecordingUrl = $"/recordings/{req.RoomName}.ogg" });
         await db.SaveChangesAsync();
         _ = StartRecording(req.RoomName);
     }
