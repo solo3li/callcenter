@@ -39,16 +39,17 @@ async def entrypoint(ctx: JobContext):
             try:
                 async with http_session.post("http://backend:5000/api/call/transfer", json={"RoomName": ctx.room.name}) as resp:
                     if resp.status == 200:
-                        asyncio.create_task(leave_room_soon(ctx))
-                        return "جاري تحويلك للموظف، ثواني معدودة"
+                        asyncio.create_task(leave_room_soon(ctx, session))
+                        return "تم إرسال الطلب للموظف بنجاح."
                     else:
                         return "عفواً، لا يوجد موظفين متاحين الآن، هل يمكنني مساعدتك في شيء آخر؟"
             except Exception as e:
                 logger.error(f"Failed to transfer: {e}")
                 return "عذراً، حدث خطأ أثناء التحويل."
 
-    async def leave_room_soon(ctx_local):
-        await asyncio.sleep(5)
+    async def leave_room_soon(ctx_local, session_local):
+        # Disable AI's listening immediately to prevent Gemini crash on multiple audio streams
+        await asyncio.sleep(4)
         await ctx_local.room.disconnect()
 
     # Pass tools to AgentSession directly, and use the regular Agent
