@@ -26,7 +26,7 @@ services:
       - "7882:7882/udp"
     command: --dev --node-ip 127.0.0.1 --bind 0.0.0.0
     environment:
-      - LIVEKIT_KEYS=devkey: secret
+      - "LIVEKIT_KEYS=devkey: secret"
       - LIVEKIT_REDIS=redis:6379
     restart: always
     depends_on:
@@ -85,7 +85,7 @@ services:
       - livekit
 
   db:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg15
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: adminpassword
