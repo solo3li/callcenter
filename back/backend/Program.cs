@@ -48,7 +48,7 @@ builder.Services.AddCors(options => {
         else
         {
             var origins = (Environment.GetEnvironmentVariable("CORS_ORIGINS") ?? "https://app.example.com").Split(',');
-            policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod();
+            policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
         }
     });
 });
@@ -69,7 +69,8 @@ builder.Services.AddHangfire(config => config
     .UseSimpleAssemblyNameTypeSerializer()
     .UseRecommendedSerializerSettings()
     .UsePostgreSqlStorage(c => c.UseNpgsqlConnection(connectionString)));
-builder.Services.AddHangfireServer();
+builder.Services.AddHangfireServer(options =>
+    options.SchedulePollingInterval = TimeSpan.FromSeconds(2));
 
 builder.Services.AddHttpContextAccessor();
 

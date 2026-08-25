@@ -17,6 +17,7 @@ export function useLiveHub(enabled: boolean) {
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(`${API_BASE}/hubs/call`, {
         accessTokenFactory: () => getStoredToken() ?? '',
+        withCredentials: false,
       })
       .withAutomaticReconnect([0, 3000, 5000, 10000])
       .build();
