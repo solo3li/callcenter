@@ -61,7 +61,7 @@ services:
       - MINIO_ACCESS_KEY=admin
       - MINIO_SECRET_KEY=adminpassword
       - MINIO_BUCKET=recordings
-      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000,http://localhost:8081
     volumes:
       - recordings_data:/app/wwwroot/recordings
     restart: always
