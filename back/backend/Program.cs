@@ -17,6 +17,7 @@ using backend.Endpoints;
 using backend.Middleware;
 using backend.Validators;
 using backend.Models.Enums;
+using backend.Models.Domain;
 using System;
 using System.Linq;
 using System.IO;
@@ -186,6 +187,13 @@ RecurringJob.AddOrUpdate<QueueBroadcaster>(
     "broadcast-queue-stats",
     j => j.BroadcastAsync(),
     "*/3 * * * * *",
+    new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc }
+);
+
+RecurringJob.AddOrUpdate<TransferTimeoutProcessor>(
+    "transfer-timeout",
+    j => j.ProcessTimeoutsAsync(),
+    "*/10 * * * * *",
     new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc }
 );
 
@@ -389,3 +397,89 @@ public class QueueBroadcaster
 
 public class TransferShimDto { public required string RoomName { get; set; } public string? AgentId { get; set; } }
 public class SummaryShimDto { public required string RoomName { get; set; } public required string Summary { get; set; } }
+
+// ── Transfer Timeout Processor ──────────────────────────────────────────
+public class TransferTimeoutProcessor
+{
+    private readonly AppDbContext _db;
+    private readonly IHubContext<CallHub> _hub;
+    public TransferTimeoutProcessor(AppDbContext db, IHubContext<CallHub> hub) { _db = db; _hub = hub; }
+
+    public async Task ProcessTimeoutsAsync()
+    {
+        var timeoutThreshold = DateTime.UtcNow.AddSeconds(-30);
+        var staleTransfers = await _db.CallTransfers
+            .Include(t => t.ToHumanAgent)
+            .Where(t => t.Status == CallTransferStatus.Requested && t.RequestedAt < timeoutThreshold)
+            .ToListAsync();
+
+        foreach (var transfer in staleTransfers)
+        {
+            var ownerUserId = await _db.HumanAgents
+                .Where(a => a.Id == transfer.ToHumanAgentId)
+                .Select(a => a.OwnerUserId)
+                .FirstOrDefaultAsync();
+
+            transfer.Status = CallTransferStatus.Failed;
+            transfer.FailureReason = "Transfer timed out — agent did not respond";
+            transfer.FailedAt = DateTime.UtcNow;
+            transfer.UpdatedAt = DateTime.UtcNow;
+
+            var handoff = await _db.CallHandoffs
+                .FirstOrDefaultAsync(h => h.CallTransferId == transfer.Id);
+            if (handoff != null)
+                handoff.Status = HandoffStatus.Expired;
+
+            await _db.SaveChangesAsync();
+
+            var session = await _db.CallSessions.FindAsync(transfer.CallSessionId);
+
+            var availableAgent = await _db.HumanAgents
+                .Where(a => a.OwnerUserId == ownerUserId
+                    && a.IsActive
+                    && a.Status == HumanAgentStatus.Available
+                    && a.Id != transfer.ToHumanAgentId)
+                .FirstOrDefaultAsync();
+
+            if (availableAgent != null)
+            {
+                var newTransfer = new CallTransfer
+                {
+                    Id = Guid.NewGuid(),
+                    CallSessionId = transfer.CallSessionId,
+                    ToHumanAgentId = availableAgent.Id,
+                    Status = CallTransferStatus.Requested,
+                    Reason = transfer.Reason,
+                    RequestedAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _db.CallTransfers.Add(newTransfer);
+
+                var newHandoff = new CallHandoff
+                {
+                    Id = Guid.NewGuid(),
+                    CallSessionId = transfer.CallSessionId,
+                    CallTransferId = newTransfer.Id,
+                    ToHumanAgentId = availableAgent.Id,
+                    Status = HandoffStatus.Pending,
+                    Reason = transfer.Reason,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _db.CallHandoffs.Add(newHandoff);
+                await _db.SaveChangesAsync();
+
+                await _hub.Clients.Group($"agent_{availableAgent.Id}")
+                    .SendAsync("IncomingTransfer", new
+                    {
+                        transferId = newTransfer.Id,
+                        handoffId = newHandoff.Id,
+                        callSessionId = transfer.CallSessionId,
+                        roomName = session?.LivekitRoomName,
+                        toHumanAgentId = availableAgent.Id,
+                        reason = transfer.Reason
+                    });
+            }
+        }
+    }
+}
