@@ -131,6 +131,15 @@ body {
   transform: translateY(-2px);
   box-shadow: 0 16px 34px -12px rgba(255, 178, 94, 0.6);
 }
+.btn-coral {
+  border-color: var(--color-coral);
+  background: var(--color-coral);
+  color: var(--color-ink);
+}
+.btn-coral:hover {
+  opacity: 0.85;
+}
+
 .btn-ghost {
   border-color: var(--color-line);
   color: var(--color-mist);

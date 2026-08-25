@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Badge from "../components/Badge";
 import { CALLS, type Call } from "../data";
-import { callsApi } from "../../api/endpoints";
+import { callsApi, recordingsApi } from "../../api/endpoints";
 import type { CallDetail as ApiCallDetail } from "../../api/endpoints";
 import { useApi } from "../../hooks/useApi";
 
@@ -137,6 +138,33 @@ function ApiDetailView({ call, onBack }: { call: ApiCallDetail; onBack: () => vo
     call.answeredAt
       ? Math.max(0, Math.round((new Date(call.answeredAt).getTime() - new Date(call.startedAt).getTime()) / 1000))
       : null;
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const isActive = ["Queued", "Ringing", "Active", "Transferred"].includes(call.status);
+
+  const forceEnd = async () => {
+    setBusy(true);
+    setActionMsg(null);
+    try {
+      await callsApi.end(call.id);
+      setActionMsg("Call ended. Refresh to see updated status.");
+    } catch (e) {
+      setActionMsg(e instanceof Error ? e.message : "Failed to end call");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const downloadRecording = async (recordingId: string) => {
+    setActionMsg(null);
+    try {
+      const res = await recordingsApi.downloadUrl(call.id, recordingId);
+      window.open(res.url, "_blank");
+    } catch (e) {
+      setActionMsg(e instanceof Error ? `Download link failed: ${e.message}` : "Download failed");
+    }
+  };
 
   let metadataPretty: string | null = null;
   if (call.metadataJson) {
@@ -162,6 +190,22 @@ function ApiDetailView({ call, onBack }: { call: ApiCallDetail; onBack: () => vo
         </div>
         <Badge label={badge.label} tone={badge.tone} />
       </div>
+
+      {isActive && (
+        <div className="flex items-center gap-3 border border-amber/40 bg-amber/10 px-4 py-3">
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-amber">
+            supervisor control
+          </span>
+          <button
+            onClick={forceEnd}
+            disabled={busy}
+            className="btn btn-coral !px-4 !py-2 !text-[10px] disabled:opacity-40"
+          >
+            {busy ? "ending…" : "■ force end call"}
+          </button>
+          {actionMsg && <span className="font-mono text-[10px] text-dim">{actionMsg}</span>}
+        </div>
+      )}
 
       <InfoGrid
         cells={[
@@ -247,7 +291,17 @@ function ApiDetailView({ call, onBack }: { call: ApiCallDetail; onBack: () => vo
                     {r.storageProvider} · {fmtDuration(r.durationSeconds)} · {r.sizeBytes ? `${Math.round(r.sizeBytes / 1024)} KB` : "?"}
                   </p>
                 </div>
-                <Badge label={r.status} tone={r.status === "Available" ? "mint" : "amber"} />
+                <div className="flex items-center gap-2">
+                  {r.status === "Available" && (
+                    <button
+                      onClick={() => void downloadRecording(r.id)}
+                      className="font-mono text-[10px] uppercase tracking-[0.12em] text-mint hover:text-mist"
+                    >
+                      ↓ download
+                    </button>
+                  )}
+                  <Badge label={r.status} tone={r.status === "Available" ? "mint" : "amber"} />
+                </div>
               </li>
             ))}
           </ul>

@@ -16,45 +16,67 @@ namespace backend.Services
 
         public async Task<List<CallConfigListItem>> ListAsync(Guid userId)
         {
-            return await _db.CallConfigurations
+            var configs = await _db.CallConfigurations
                 .Where(c => c.UserId == userId)
-                .Select(c => new CallConfigListItem(
-                    c.Id,
-                    c.Name,
-                    c.Description,
-                    c.PersonaId,
-                    c.Persona != null ? c.Persona.Name : null,
-                    c.WorkflowId,
-                    c.Workflow != null ? c.Workflow.Name : null,
-                    c.IsActive,
-                    c.ConfigJson,
-                    c.CallConfigurationActions.Count,
-                    c.CreatedAt,
-                    c.UpdatedAt
-                ))
                 .OrderByDescending(c => c.CreatedAt)
                 .ToListAsync();
+
+            return await ProjectAsync(configs);
         }
 
         public async Task<CallConfigListItem?> GetByIdAsync(Guid id, Guid userId)
         {
-            return await _db.CallConfigurations
+            var configs = await _db.CallConfigurations
                 .Where(c => c.Id == id && c.UserId == userId)
-                .Select(c => new CallConfigListItem(
-                    c.Id,
-                    c.Name,
-                    c.Description,
-                    c.PersonaId,
-                    c.Persona != null ? c.Persona.Name : null,
-                    c.WorkflowId,
-                    c.Workflow != null ? c.Workflow.Name : null,
-                    c.IsActive,
-                    c.ConfigJson,
-                    c.CallConfigurationActions.Count,
-                    c.CreatedAt,
-                    c.UpdatedAt
-                ))
-                .FirstOrDefaultAsync();
+                .ToListAsync();
+
+            var list = await ProjectAsync(configs);
+            return list.FirstOrDefault();
+        }
+
+        // EF Core cannot translate navigation-join + correlated-count projections for this
+        // entity on the current provider, so fetch scalars then resolve names in memory.
+        private async Task<List<CallConfigListItem>> ProjectAsync(List<CallConfiguration> configs)
+        {
+            if (configs.Count == 0) return new List<CallConfigListItem>();
+
+            var personaIds = configs.Where(c => c.PersonaId.HasValue).Select(c => c.PersonaId!.Value).Distinct().ToList();
+            var workflowIds = configs.Where(c => c.WorkflowId.HasValue).Select(c => c.WorkflowId!.Value).Distinct().ToList();
+
+            var personaNames = personaIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _db.Personas
+                    .Where(p => personaIds.Contains(p.Id))
+                    .ToDictionaryAsync(p => p.Id, p => p.Name);
+
+            var workflowNames = workflowIds.Count == 0
+                ? new Dictionary<Guid, string>()
+                : await _db.Workflows
+                    .Where(w => workflowIds.Contains(w.Id))
+                    .ToDictionaryAsync(w => w.Id, w => w.Name);
+
+            var configIds = configs.Select(c => c.Id).ToList();
+            var actionCounts = await _db.CallConfigurationActions
+                .Where(ca => configIds.Contains(ca.CallConfigurationId))
+                .GroupBy(ca => ca.CallConfigurationId)
+                .Select(g => new { g.Key, Count = g.Count() })
+                .ToListAsync();
+            var countMap = actionCounts.ToDictionary(x => x.Key, x => x.Count);
+
+            return configs.Select(c => new CallConfigListItem(
+                c.Id,
+                c.Name,
+                c.Description,
+                c.PersonaId,
+                c.PersonaId.HasValue && personaNames.TryGetValue(c.PersonaId.Value, out var pn) ? pn : null,
+                c.WorkflowId,
+                c.WorkflowId.HasValue && workflowNames.TryGetValue(c.WorkflowId.Value, out var wn) ? wn : null,
+                c.IsActive,
+                c.ConfigJson,
+                countMap.TryGetValue(c.Id, out var cnt) ? cnt : 0,
+                c.CreatedAt,
+                c.UpdatedAt
+            )).ToList();
         }
 
         public async Task<CallConfigListItem> CreateAsync(Guid userId, CreateCallConfigRequest request)

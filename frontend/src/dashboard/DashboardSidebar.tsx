@@ -1,15 +1,39 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
-const LINKS = [
-  { to: "/dashboard/live", label: "Live Wallboard", icon: "▣" },
-  { to: "/dashboard/roster", label: "Agent Roster", icon: "▥" },
-  { to: "/dashboard/analytics", label: "Analytics", icon: "▦" },
-  { to: "/dashboard/history", label: "Call History", icon: "▤" },
+const SECTIONS = [
+  {
+    label: "operations",
+    links: [
+      { to: "/dashboard/live", label: "Live Wallboard", icon: "▣" },
+      { to: "/dashboard/queue", label: "Queue", icon: "◍" },
+      { to: "/dashboard/roster", label: "Agent Roster", icon: "▥" },
+      { to: "/dashboard/analytics", label: "Analytics", icon: "▦" },
+      { to: "/dashboard/history", label: "Call History", icon: "▤" },
+    ],
+  },
+  {
+    label: "platform setup",
+    links: [
+      { to: "/dashboard/configs", label: "Call Configs", icon: "◈" },
+      { to: "/dashboard/personas", label: "AI Personas", icon: "◉" },
+      { to: "/dashboard/workflows", label: "Workflows", icon: "◇" },
+      { to: "/dashboard/knowledge", label: "Knowledge Bases", icon: "❏" },
+    ],
+  },
+  {
+    label: "business",
+    links: [
+      { to: "/dashboard/usage", label: "Usage & Metering", icon: "▤" },
+      { to: "/dashboard/api-keys", label: "API Keys", icon: "⚿" },
+      { to: "/dashboard/agents-admin", label: "Human Agents", icon: "☺" },
+      { to: "/dashboard/business", label: "Licenses & Partners", icon: "▦" },
+    ],
+  },
 ];
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
-  `flex items-center gap-3 px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.14em] transition-all duration-200 ${
+  `flex items-center gap-3 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.14em] transition-all duration-200 ${
     isActive
       ? "border-l-2 border-mint bg-mint/8 text-mint"
       : "border-l-2 border-transparent text-dim hover:text-mist hover:border-line"
@@ -25,8 +49,8 @@ export default function DashboardSidebar() {
   };
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 flex w-[220px] flex-col border-r border-line bg-deep">
-      <div className="flex h-16 items-center gap-2.5 border-b border-line px-5">
+    <aside className="fixed inset-y-0 left-0 z-40 flex w-[220px] flex-col overflow-y-auto border-r border-line bg-deep">
+      <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-line px-5">
         <svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true">
           <circle cx="12" cy="16" r="8.5" fill="none" stroke="var(--color-mint)" strokeWidth="2.6" />
           <circle cx="20.5" cy="16" r="8.5" fill="none" stroke="var(--color-amber)" strokeWidth="2.6" opacity="0.85" />
@@ -34,16 +58,23 @@ export default function DashboardSidebar() {
         <span className="font-display text-lg font-bold tracking-tight text-mist">Tandem</span>
       </div>
 
-      <nav className="flex-1 space-y-0.5 py-4">
-        {LINKS.map((l) => (
-          <NavLink key={l.to} to={l.to} end className={linkClass}>
-            <span className="text-sm">{l.icon}</span>
-            {l.label}
-          </NavLink>
+      <nav className="flex-1 space-y-4 py-4">
+        {SECTIONS.map((section) => (
+          <div key={section.label}>
+            <p className="mb-1 px-4 font-mono text-[8px] uppercase tracking-[0.24em] text-dim/60">
+              {section.label}
+            </p>
+            {section.links.map((l) => (
+              <NavLink key={l.to} to={l.to} className={linkClass}>
+                <span className="text-xs">{l.icon}</span>
+                {l.label}
+              </NavLink>
+            ))}
+          </div>
         ))}
       </nav>
 
-      <div className="space-y-3 border-t border-line p-4">
+      <div className="shrink-0 space-y-3 border-t border-line p-4">
         {user && (
           <div className="border border-line px-3 py-2.5">
             <p className="truncate font-display text-sm font-semibold text-mist">
