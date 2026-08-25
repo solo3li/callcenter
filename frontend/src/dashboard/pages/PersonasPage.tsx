@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { PageHeader, Panel, Btn, TextInput, TextArea, ErrorBox, Empty, Modal, Field, Th, Td } from "../components/ui";
 import Badge from "../components/Badge";
-import { personasApi, actionsApi } from "../../api/endpoints";
+import { personasApi, actionsApi, knowledgeApi } from "../../api/endpoints";
 import type { PersonaListItem, PersonaVersionDto, ActionDefinitionDto } from "../../api/endpoints";
 import { useApi } from "../../hooks/useApi";
 
@@ -9,7 +9,7 @@ const API_ENABLED = !!import.meta.env.VITE_API_URL;
 
 export default function PersonasPage() {
   const { data: personas, loading, error, refetch } = useApi(() => personasApi.list(), []);
-  const [modal, setModal] = useState<"create" | "edit" | "version" | "actions" | null>(null);
+  const [modal, setModal] = useState<"create" | "edit" | "version" | "actions" | "knowledge" | null>(null);
   const [selected, setSelected] = useState<PersonaListItem | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -102,6 +102,7 @@ export default function PersonasPage() {
                       <button onClick={() => openEdit(p)} className="font-mono text-[10px] uppercase text-dim hover:text-mint">edit</button>
                       <button onClick={() => openVersion(p)} className="font-mono text-[10px] uppercase text-dim hover:text-mint">versions</button>
                       <PersonaActionsCell personaId={p.id} onOpen={() => { setSelected(p); setModal("actions"); }} />
+                      <PersonaKbCell personaId={p.id} onOpen={() => { setSelected(p); setModal("knowledge"); }} />
                       <button onClick={() => void toggleActive(p)} className="font-mono text-[10px] uppercase text-dim hover:text-amber">
                         {p.isActive ? "disable" : "enable"}
                       </button>
@@ -139,6 +140,9 @@ export default function PersonasPage() {
       )}
       {modal === "actions" && selected && (
         <ActionsPanel personaId={selected.id} onClose={() => setModal(null)} />
+      )}
+      {modal === "knowledge" && selected && (
+        <PersonaKbPanel personaId={selected.id} onClose={() => setModal(null)} />
       )}
     </div>
   );
@@ -254,5 +258,84 @@ function ActionsPanel({ personaId, onClose }: { personaId: string; onClose: () =
         </Panel>
       </div>
     </Modal>
+  );
+}
+
+function PersonaKbCell({ personaId, onOpen }: { personaId: string; onOpen: () => void }) {
+  const { data } = useApi(() => personasApi.knowledgeBases(personaId), [personaId]);
+  const count = data?.length ?? 0;
+  return (
+    <button onClick={onOpen} className="font-mono text-[10px] uppercase text-dim hover:text-mint">
+      knowledge ({count})
+    </button>
+  );
+}
+
+function PersonaKbPanel({ personaId, onClose }: { personaId: string; onClose: () => void }) {
+  const { data: linked, loading, error, refetch } = useApi(
+    () => personasApi.knowledgeBases(personaId),
+    [personaId]
+  );
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const linkedIds = new Set((linked ?? []).map((k) => k.id));
+
+  const toggle = async (kbId: string) => {
+    setMsg(null);
+    try {
+      if (linkedIds.has(kbId)) await personasApi.unlinkKb(personaId, kbId);
+      else await personasApi.linkKb(personaId, kbId);
+      void refetch();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "failed");
+    }
+  };
+
+  return (
+    <Modal open title="Persona knowledge bases" onClose={onClose}>
+      <div className="space-y-4">
+        <p className="font-mono text-[10px] leading-relaxed text-dim">
+          Linked knowledge bases ground this persona&apos;s answers via RAG search during calls.
+        </p>
+        <ErrorBox error={error ?? msg} />
+        {loading ? <Empty>loading�</Empty> : !linked || linked.length === 0 ? (
+          <Empty>no knowledge bases linked yet</Empty>
+        ) : (
+          <ul className="space-y-1.5">
+            {(linked as { id: string; name: string; isActive: boolean }[]).map((k) => (
+              <li key={k.id} className="flex items-center justify-between border border-mint/30 bg-mint/5 px-3 py-2">
+                <span className="text-xs text-mist">{k.name}</span>
+                <button onClick={() => void toggle(k.id)} className="font-mono text-[10px] uppercase text-coral">
+                  unlink
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <KbPicker linkedIds={linkedIds} onToggle={(id) => void toggle(id)} />
+      </div>
+    </Modal>
+  );
+}
+
+function KbPicker({ linkedIds, onToggle }: {
+  linkedIds: Set<string>;
+  onToggle: (id: string) => void;
+}) {
+  const { data: kbs, loading } = useApi(() => knowledgeApi.kbs(), []);
+
+  const available = (kbs ?? []).filter((k) => !linkedIds.has(k.id));
+  if (loading) return <Empty>loading knowledge bases…</Empty>;
+  if (available.length === 0)
+    return <Empty>all knowledge bases are already linked (or none exist — create one under Platform Setup → Knowledge Bases)</Empty>;
+  return (
+    <ul className="space-y-1.5">
+      {available.map((k) => (
+        <li key={k.id} className="flex items-center justify-between border border-line bg-deep/60 px-3 py-2">
+          <span className="text-xs text-mist">{k.name}</span>
+          <button onClick={() => onToggle(k.id)} className="font-mono text-[10px] uppercase text-mint">link</button>
+        </li>
+      ))}
+    </ul>
   );
 }

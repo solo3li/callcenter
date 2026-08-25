@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Badge from "../components/Badge";
 import { CALLS, type Call } from "../data";
-import { callsApi, recordingsApi } from "../../api/endpoints";
+import { callsApi, recordingsApi, transfersApi } from "../../api/endpoints";
 import type { CallDetail as ApiCallDetail } from "../../api/endpoints";
 import { useApi } from "../../hooks/useApi";
 
@@ -140,6 +140,8 @@ function ApiDetailView({ call, onBack }: { call: ApiCallDetail; onBack: () => vo
       : null;
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [transferReason, setTransferReason] = useState("");
+  const [transferMsg, setTransferMsg] = useState<string | null>(null);
 
   const isActive = ["Queued", "Ringing", "Active", "Transferred"].includes(call.status);
 
@@ -151,6 +153,20 @@ function ApiDetailView({ call, onBack }: { call: ApiCallDetail; onBack: () => vo
       setActionMsg("Call ended. Refresh to see updated status.");
     } catch (e) {
       setActionMsg(e instanceof Error ? e.message : "Failed to end call");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const initiateTransfer = async () => {
+    setBusy(true);
+    setTransferMsg(null);
+    try {
+      await transfersApi.initiate(call.id, transferReason);
+      setTransferMsg("Transfer requested — routing to next available agent. Refresh to see it in the list below.");
+      setTransferReason("");
+    } catch (e) {
+      setTransferMsg(e instanceof Error ? e.message : "Transfer failed");
     } finally {
       setBusy(false);
     }
@@ -192,18 +208,37 @@ function ApiDetailView({ call, onBack }: { call: ApiCallDetail; onBack: () => vo
       </div>
 
       {isActive && (
-        <div className="flex items-center gap-3 border border-amber/40 bg-amber/10 px-4 py-3">
-          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-amber">
+        <div className="space-y-3 border border-amber/40 bg-amber/10 px-4 py-3">
+          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-amber">
             supervisor control
-          </span>
-          <button
-            onClick={forceEnd}
-            disabled={busy}
-            className="btn btn-coral !px-4 !py-2 !text-[10px] disabled:opacity-40"
-          >
-            {busy ? "ending…" : "■ force end call"}
-          </button>
-          {actionMsg && <span className="font-mono text-[10px] text-dim">{actionMsg}</span>}
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={forceEnd}
+              disabled={busy}
+              className="btn btn-coral !px-4 !py-2 !text-[10px] disabled:opacity-40"
+            >
+              {busy ? "ending…" : "■ force end call"}
+            </button>
+            <input
+              value={transferReason}
+              onChange={(e) => setTransferReason(e.target.value)}
+              placeholder="transfer reason (optional)…"
+              className="min-w-[220px] flex-1 border border-line bg-deep px-3 py-2 font-mono text-xs text-mist placeholder:text-dim/60 focus:border-mint focus:outline-none"
+            />
+            <button
+              onClick={initiateTransfer}
+              disabled={busy}
+              className="btn btn-mint !px-4 !py-2 !text-[10px] disabled:opacity-40"
+            >
+              {busy ? "routing…" : "→ transfer to next agent"}
+            </button>
+          </div>
+          {(actionMsg || transferMsg) && (
+            <p className="font-mono text-[10px] leading-relaxed text-dim">
+              {actionMsg ?? transferMsg}
+            </p>
+          )}
         </div>
       )}
 

@@ -58,7 +58,7 @@ export default function AgentsAdminPage() {
                 <tr key={a.id} className="border-t border-line/50">
                   <Td>{a.name}</Td>
                   <Td mono>{a.email ?? "—"}</Td>
-                  <Td><Badge label={a.status} tone={a.status === "Available" ? "mint" : a.status === "Offline" ? "dim" : "amber"} /></Td>
+                  <Td><Badge label={String(a.status)} tone={Number(a.status) === 1 || a.status === "Available" ? "mint" : Number(a.status) === 0 || a.status === "Offline" ? "dim" : "amber"} /></Td>
                   <Td mono>{a.maxConcurrentCalls}</Td>
                   <Td>
                     <div className="flex flex-wrap items-center gap-2">

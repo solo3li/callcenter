@@ -297,6 +297,17 @@ export const personasApi = {
     api.get<PersonaVersionDto>(`/api/personas/${personaId}/versions/${versionId}`),
   publishVersion: (personaId: string, versionId: string) =>
     api.post<PersonaVersionDto>(`/api/personas/${personaId}/versions/${versionId}/publish`),
+  knowledgeBases: (personaId: string) =>
+    api.get<KnowledgeBaseListItem[]>(`/api/personas/${personaId}/knowledge-bases`),
+  linkKb: (personaId: string, kbId: string) =>
+    api.post<{ message: string }>(`/api/personas/${personaId}/knowledge-bases/${kbId}`),
+  unlinkKb: (personaId: string, kbId: string) =>
+    api.del<{ message: string }>(`/api/personas/${personaId}/knowledge-bases/${kbId}`),
+};
+
+export const transfersApi = {
+  initiate: (callSessionId: string, reason?: string) =>
+    api.post<unknown>(`/api/calls/${callSessionId}/transfers`, { reason: reason || undefined }),
 };
 
 export interface WorkflowListItem {
@@ -475,7 +486,8 @@ export interface HumanAgentAdminDto {
   id: string;
   name: string;
   email?: string | null;
-  status: string;
+  /** Serialized as a numeric enum: 0 Offline · 1 Available · 2 Break · 3 NotReady · 4 InCall */
+  status: string | number;
   isActive: boolean;
   maxConcurrentCalls: number;
   createdAt: string;
