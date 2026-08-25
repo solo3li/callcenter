@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.SignalR;
-using System.Threading.Tasks;
 using backend.Data;
+using backend.Models.Domain;
+using backend.Models.Enums;
 using Microsoft.EntityFrameworkCore;
-using System;
 
 namespace backend.Hubs
 {
@@ -10,35 +10,49 @@ namespace backend.Hubs
     {
         private readonly AppDbContext _db;
 
-        public CallHub(AppDbContext db)
-        {
-            _db = db;
-        }
+        public CallHub(AppDbContext db) { _db = db; }
 
-        public async Task RegisterAgent(string username)
+        public async Task RegisterAgent(string agentId)
         {
-            var agent = await _db.Agents.FirstOrDefaultAsync(a => a.Username == username);
-            if (agent != null)
+            if (!Guid.TryParse(agentId, out var id)) return;
+            var agent = await _db.HumanAgents.FirstOrDefaultAsync(a => a.Id == id);
+            if (agent == null) return;
+
+            agent.Status = HumanAgentStatus.Available;
+            Context.Items["HumanAgentId"] = agent.Id;
+            Context.Items["OwnerUserId"] = agent.OwnerUserId;
+
+            var session = new HumanAgentSession
             {
-                agent.IsOnline = true;
-                agent.Status = "Available";
-                Context.Items["Username"] = username;
-                await _db.SaveChangesAsync();
-            }
+                HumanAgentId = agent.Id,
+                LivekitIdentity = $"agent_{agent.Id.ToString("N")[..8]}",
+                Status = "active",
+                ConnectedAt = DateTime.UtcNow
+            };
+            _db.HumanAgentSessions.Add(session);
+            await _db.SaveChangesAsync();
         }
 
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
-            var username = Context.Items["Username"] as string;
-            if (!string.IsNullOrEmpty(username))
+            var agentId = Context.Items["HumanAgentId"] as Guid?;
+            if (agentId.HasValue)
             {
-                var agent = await _db.Agents.FirstOrDefaultAsync(a => a.Username == username);
+                var agent = await _db.HumanAgents.FirstOrDefaultAsync(a => a.Id == agentId.Value);
                 if (agent != null)
                 {
-                    agent.IsOnline = false;
-                    agent.Status = "Offline";
-                    await _db.SaveChangesAsync();
+                    agent.Status = HumanAgentStatus.Offline;
                 }
+                var session = await _db.HumanAgentSessions
+                    .Where(s => s.HumanAgentId == agentId.Value && s.DisconnectedAt == null)
+                    .OrderByDescending(s => s.ConnectedAt)
+                    .FirstOrDefaultAsync();
+                if (session != null)
+                {
+                    session.DisconnectedAt = DateTime.UtcNow;
+                    session.Status = "disconnected";
+                }
+                await _db.SaveChangesAsync();
             }
             await base.OnDisconnectedAsync(exception);
         }

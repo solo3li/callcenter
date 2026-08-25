@@ -6,11 +6,17 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
 using Hangfire;
 using Hangfire.PostgreSql;
+using StackExchange.Redis;
+using FluentValidation;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 using backend.Data;
 using backend.Hubs;
 using backend.Services;
 using backend.Endpoints;
 using backend.Middleware;
+using backend.Validators;
+using backend.Models.Enums;
 using System;
 using System.Linq;
 using System.IO;
@@ -21,7 +27,15 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddCors(options => {
     options.AddDefaultPolicy(policy => {
-        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+        if (builder.Environment.IsDevelopment())
+        {
+            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+        }
+        else
+        {
+            var origins = (Environment.GetEnvironmentVariable("CORS_ORIGINS") ?? "https://app.example.com").Split(',');
+            policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod();
+        }
     });
 });
 
@@ -44,7 +58,59 @@ builder.Services.AddHangfireServer();
 
 builder.Services.AddHttpContextAccessor();
 
-// ── Register All Services ───────────────────────────────────────────────
+// ── Redis ─────────────────────────────────────────────────────────────────
+builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
+    ConnectionMultiplexer.Connect(Environment.GetEnvironmentVariable("REDIS_CONNECTION") ?? "redis:6379"));
+builder.Services.AddScoped<RedisPresenceService>();
+
+// ── FluentValidation ──────────────────────────────────────────────────────
+builder.Services.AddValidatorsFromAssemblyContaining<RegisterRequestValidator>();
+
+// ── Rate Limiting ─────────────────────────────────────────────────────────
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("fixed", opt =>
+    {
+        opt.PermitLimit = 100;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit = 2;
+    });
+    options.AddFixedWindowLimiter("auth", opt =>
+    {
+        opt.PermitLimit = 5;
+        opt.Window = TimeSpan.FromMinutes(1);
+    });
+    options.RejectionStatusCode = 429;
+});
+
+// ── Swagger ───────────────────────────────────────────────────────────────
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new() { Title = "AI Calling Platform API", Version = "v1" });
+    c.AddSecurityDefinition("Bearer", new()
+    {
+        Description = "JWT Authorization header. Example: \"Bearer {token}\"",
+        Name = "Authorization",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+    c.AddSecurityRequirement(new()
+    {
+        {
+            new()
+            {
+                Reference = new() { Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme, Id = "Bearer" }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
+
+builder.Services.AddSingleton<HttpClient>();
+builder.Services.AddScoped<EmbeddingService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<ApiKeyService>();
 builder.Services.AddScoped<HumanAgentService>();
@@ -64,6 +130,7 @@ builder.Services.AddScoped<PartnerService>();
 builder.Services.AddScoped<WorkflowService>();
 builder.Services.AddScoped<KnowledgeBaseService>();
 builder.Services.AddScoped<StatsService>();
+builder.Services.AddSingleton<StorageService>();
 
 var app = builder.Build();
 
@@ -90,12 +157,16 @@ using (var scope = app.Services.CreateScope())
 
 // ── Middleware Pipeline ──────────────────────────────────────────────────
 app.UseCors();
+app.UseRateLimiter();
 app.UseDefaultFiles();
 var provider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
 provider.Mappings[".ogg"] = "audio/ogg";
 app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = provider });
 
 app.UseAuthMiddleware();
+
+app.UseSwagger();
+app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "AI Calling Platform API v1"));
 
 app.UseHangfireDashboard("/hangfire");
 
@@ -127,6 +198,70 @@ app.MapWorkflowEndpoints();
 app.MapKnowledgeBaseEndpoints();
 app.MapStatsEndpoints();
 app.MapWebhookEndpoints();
+
+// ── Legacy AI Worker Compat Shims ────────────────────────────────────────
+app.MapPost("/api/call/transfer", async (
+    TransferShimDto req, CallSessionService sessionService,
+    CallTransferService transferService, AppDbContext db) =>
+{
+    var session = await db.CallSessions
+        .FirstOrDefaultAsync(c => c.LivekitRoomName == req.RoomName);
+    if (session == null)
+        return Results.BadRequest(new { error = "Call session not found for room" });
+    try
+    {
+        var result = await transferService.InitiateTransferAsync(
+            session.Id, session.UserId, null);
+        return Results.Ok(new { transferId = result!.Transfer.Id, agentName = result.Transfer.ToHumanAgentName });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/call/active", async (
+    TransferShimDto req, CallSessionService sessionService,
+    LiveKitService liveKit, AppDbContext db) =>
+{
+    var existing = await db.CallSessions
+        .FirstOrDefaultAsync(c => c.LivekitRoomName == req.RoomName);
+    if (existing == null)
+    {
+        await sessionService.CreateAsync(
+            Guid.NewGuid(), null, null,
+            req.RoomName, "Inbound");
+    }
+    return Results.Ok();
+});
+
+app.MapPost("/api/call/end", async (
+    TransferShimDto req, CallSessionService sessionService, AppDbContext db) =>
+{
+    var session = await db.CallSessions
+        .FirstOrDefaultAsync(c => c.LivekitRoomName == req.RoomName);
+    if (session != null)
+    {
+        await sessionService.EndCallAsync(session.Id, session.UserId);
+    }
+    return Results.Ok();
+});
+
+app.MapPost("/api/call/summary", async (
+    SummaryShimDto req, CallHandoffService handoffService, AppDbContext db) =>
+{
+    var session = await db.CallSessions
+        .FirstOrDefaultAsync(c => c.LivekitRoomName == req.RoomName);
+    if (session == null) return Results.Ok();
+    var handoff = await db.CallHandoffs
+        .FirstOrDefaultAsync(h => h.CallSessionId == session.Id);
+    if (handoff != null)
+    {
+        await handoffService.CreateContextAsync(
+            handoff.CallTransferId, req.Summary, null, null);
+    }
+    return Results.Ok();
+});
 
 // ── Legacy backward-compat endpoints ────────────────────────────────────
 app.MapGet("/api/token", async (
@@ -210,30 +345,35 @@ public class QueueBroadcaster
 
     public async Task BroadcastAsync()
     {
-        var activeCalls = await _db.Calls
-            .Where(c => c.Status == "Active" || c.Status == "Transferred")
+        var activeSessions = await _db.CallSessions
+            .Where(c => c.Status == CallSessionStatus.Active || c.Status == CallSessionStatus.Transferred)
+            .OrderByDescending(c => c.StartedAt)
             .ToListAsync();
-        var agents = await _db.Agents
-            .Select(a => new { a.Id, a.Username, a.IsOnline, a.Status }).ToListAsync();
-        var agentCalls = await _db.Calls
-            .Where(c => c.Status == "Transferred" && c.HandledByAgentId != null).ToListAsync();
-
-        var agentList = agents.Select(a => {
-            bool isInCall = agentCalls.Any(c => c.HandledByAgentId == a.Id);
-            string st = !a.IsOnline ? "Offline" : (isInCall ? "In Call" : (a.Status ?? "Available"));
-            return new { a.Id, a.Username, Status = st };
-        });
+        var agents = await _db.HumanAgents
+            .Where(a => a.IsActive)
+            .Select(a => new { a.Id, a.Name, a.Status })
+            .ToListAsync();
 
         var payload = new {
-            activeCount = activeCalls.Count,
-            agentsOnline = agents.Count(a => a.IsOnline),
-            activeCalls = activeCalls.Select(c => new {
-                c.Id, c.RoomName, c.CallerId, c.Status, c.StartTime, c.HandledByAgentId,
-                durationSeconds = (int)(DateTime.UtcNow - c.StartTime).TotalSeconds
+            activeCount = activeSessions.Count,
+            agentsOnline = agents.Count(a => a.Status == HumanAgentStatus.Available),
+            activeCalls = activeSessions.Select(c => new {
+                id = c.Id.ToString(),
+                roomName = c.LivekitRoomName,
+                status = c.Status.ToString(),
+                startTime = c.StartedAt,
+                durationSeconds = (int)(DateTime.UtcNow - c.StartedAt).TotalSeconds
             }),
-            agents = agentList
+            agents = agents.Select(a => new {
+                id = a.Id.ToString(),
+                a.Name,
+                Status = a.Status.ToString()
+            })
         };
 
         await _hub.Clients.All.SendAsync("QueueUpdate", payload);
     }
 }
+
+public class TransferShimDto { public required string RoomName { get; set; } public string? AgentId { get; set; } }
+public class SummaryShimDto { public required string RoomName { get; set; } public required string Summary { get; set; } }

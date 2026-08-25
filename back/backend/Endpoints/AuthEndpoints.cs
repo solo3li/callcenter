@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using FluentValidation;
 using Jose;
 using backend.Data;
 using backend.Dtos;
@@ -21,6 +22,11 @@ namespace backend.Endpoints
         {
             app.MapPost("/api/auth/register", async (RegisterRequest request, AuthService authService) =>
             {
+                var validator = app.Services.GetRequiredService<IValidator<RegisterRequest>>();
+                var validationResult = await validator.ValidateAsync(request);
+                if (!validationResult.IsValid)
+                    return Results.ValidationProblem(validationResult.ToDictionary());
+
                 try
                 {
                     var user = await authService.RegisterAsync(request);
@@ -39,10 +45,15 @@ namespace backend.Endpoints
                 {
                     return Results.Conflict(new { error = ex.Message });
                 }
-            });
+            }).RequireRateLimiting("auth");
 
             app.MapPost("/api/auth/login", async (LoginRequest request, AuthService authService) =>
             {
+                var validator = app.Services.GetRequiredService<IValidator<LoginRequest>>();
+                var validationResult = await validator.ValidateAsync(request);
+                if (!validationResult.IsValid)
+                    return Results.ValidationProblem(validationResult.ToDictionary());
+
                 try
                 {
                     var accessToken = await authService.LoginAsync(request);
@@ -66,7 +77,7 @@ namespace backend.Endpoints
                 {
                     return Results.Unauthorized();
                 }
-            });
+            }).RequireRateLimiting("auth");
 
             app.MapPost("/api/auth/refresh", async (HttpContext context, AuthService authService) =>
             {

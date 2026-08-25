@@ -12,10 +12,12 @@ namespace backend.Services
     public class KnowledgeBaseService
     {
         private readonly AppDbContext _db;
+        private readonly EmbeddingService _embeddingService;
 
-        public KnowledgeBaseService(AppDbContext db)
+        public KnowledgeBaseService(AppDbContext db, EmbeddingService embeddingService)
         {
             _db = db;
+            _embeddingService = embeddingService;
         }
 
         public async Task<List<KnowledgeBaseListItem>> ListAsync(Guid userId)
@@ -188,6 +190,27 @@ namespace backend.Services
 
         public async Task<List<SearchResult>> SearchAsync(Guid knowledgeBaseId, string query, int topK = 5)
         {
+            var hasEmbeddings = await _db.KnowledgeChunks
+                .AnyAsync(c => c.KnowledgeDocument.KnowledgeBaseId == knowledgeBaseId && c.Embedding != null);
+
+            if (hasEmbeddings)
+            {
+                var embedding = await _embeddingService.GenerateEmbeddingAsync(query);
+                var vectorStr = _embeddingService.FormatVectorLiteral(embedding);
+
+                var sql = $@"
+                    SELECT c.""id"", c.""knowledge_document_id"", d.""name"", c.""content"", c.""chunk_index"",
+                           c.""embedding"" <=> '{vectorStr}'::vector AS similarity
+                    FROM knowledge_chunks c
+                    JOIN knowledge_documents d ON c.""knowledge_document_id"" = d.""id""
+                    WHERE d.""knowledge_base_id"" = '{knowledgeBaseId}'
+                    ORDER BY similarity
+                    LIMIT {topK}";
+
+                var results = await _db.Database.SqlQueryRaw<SearchResultRaw>(sql).ToListAsync();
+                return results.Select(r => new SearchResult(r.id, r.knowledge_document_id, r.name, r.content, r.chunk_index, (float?)r.similarity)).ToList();
+            }
+
             var chunks = await _db.KnowledgeChunks
                 .Where(c => c.KnowledgeDocument.KnowledgeBaseId == knowledgeBaseId)
                 .Where(c => EF.Functions.ILike(c.Content, $"%{query}%"))
@@ -202,6 +225,16 @@ namespace backend.Services
                 c.Content,
                 c.ChunkIndex,
                 null)).ToList();
+        }
+
+        private class SearchResultRaw
+        {
+            public Guid id { get; set; }
+            public Guid knowledge_document_id { get; set; }
+            public string name { get; set; } = "";
+            public string content { get; set; } = "";
+            public int chunk_index { get; set; }
+            public double? similarity { get; set; }
         }
 
         public async Task<List<KnowledgeBaseListItem>> GetPersonaKnowledgeBasesAsync(Guid personaId)

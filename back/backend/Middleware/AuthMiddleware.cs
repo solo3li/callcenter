@@ -34,7 +34,8 @@ namespace backend.Middleware
                 path.StartsWith("/hubs/") ||
                 path.StartsWith("/hangfire") ||
                 path.StartsWith("/api/token") ||
-                path.StartsWith("/api/agent/"))
+                path.StartsWith("/api/agent/") ||
+                path.StartsWith("/api/call/"))
             {
                 await _next(context);
                 return;

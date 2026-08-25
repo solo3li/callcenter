@@ -81,7 +81,7 @@ namespace backend.Services
 
         public async Task<string> StartEgress(string roomName)
         {
-            var token = GenerateAdminToken(roomName);
+            var token = GenerateAdminToken("*");
             var reqBody = new
             {
                 room_name = roomName,
@@ -98,7 +98,9 @@ namespace backend.Services
 
             var response = await _http.SendAsync(request);
             response.EnsureSuccessStatusCode();
-            return await response.Content.ReadAsStringAsync();
+            var responseBody = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(responseBody);
+            return doc.RootElement.GetProperty("egress_id").GetString() ?? string.Empty;
         }
 
         public async Task<string> StopEgress(string roomName)
@@ -113,6 +115,21 @@ namespace backend.Services
             };
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
+            var response = await _http.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsStringAsync();
+        }
+
+        public async Task<string> StopEgressById(string egressId)
+        {
+            var token = GenerateAdminToken("*");
+            var reqBody = $"{{\"egress_id\":\"{egressId}\"}}";
+            var content = new StringContent(reqBody, Encoding.UTF8, "application/json");
+            var request = new HttpRequestMessage(HttpMethod.Post, $"{_host}/twirp/livekit.Egress/StopEgress")
+            {
+                Content = content
+            };
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
             var response = await _http.SendAsync(request);
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadAsStringAsync();

@@ -4,28 +4,37 @@ import * as signalR from '@microsoft/signalr';
 import { Room, RoomEvent } from 'livekit-client';
 import { LiveKitRoom, useRoomContext, VideoTrack } from '@livekit/react-native';
 
-const BACKEND_URL = 'http://127.0.0.1:5000'; // Change to local IP if testing on physical device
+const BACKEND_URL = 'http://127.0.0.1:5000';
 
 export default function App() {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('adminpassword');
+  const [accessKey, setAccessKey] = useState('');
+  const [agentId, setAgentId] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [hubConnection, setHubConnection] = useState(null);
-  
+  const [agentName, setAgentName] = useState('');
+
   const [incomingRoom, setIncomingRoom] = useState(null);
+  const [callSessionId, setCallSessionId] = useState(null);
+  const [transferId, setTransferId] = useState(null);
+  const [handoffId, setHandoffId] = useState(null);
   const [activeToken, setActiveToken] = useState(null);
   const [livekitUrl, setLivekitUrl] = useState(null);
+  const [handoffContext, setHandoffContext] = useState(null);
 
   const handleLogin = async () => {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/agent/login`, {
+      const response = await fetch(`${BACKEND_URL}/api/auth/agent-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ accessKey: accessKey })
       });
       if (response.ok) {
+        const data = await response.json();
+        setAgentId(data.agentId);
+        setAgentName(data.name);
+        setLivekitUrl(data.livekitUrl);
         setIsLoggedIn(true);
-        setupSignalR(username);
+        setupSignalR(data.agentId);
       } else {
         alert('Login failed');
       }
@@ -34,27 +43,51 @@ export default function App() {
     }
   };
 
-  const setupSignalR = (user) => {
+  const setupSignalR = (agentId) => {
     const connection = new signalR.HubConnectionBuilder()
-      .withUrl(`${BACKEND_URL}/hubs/call?username=${user}`)
+      .withUrl(`${BACKEND_URL}/hubs/call?agent_id=${agentId}`)
       .withAutomaticReconnect()
       .build();
 
-    connection.on('IncomingTransfer', (roomName) => {
-      console.log('Incoming call to room:', roomName);
-      setIncomingRoom(roomName);
+    connection.on('IncomingTransfer', (data) => {
+      console.log('Incoming transfer:', data);
+      setCallSessionId(data.callSessionId);
+      setTransferId(data.transferId);
+      setHandoffId(data.handoffId);
+      setIncomingRoom(data.roomName);
     });
 
-    connection.start().catch(err => console.error('SignalR error:', err));
+    connection.start().then(() => {
+      connection.invoke('RegisterAgent', agentId);
+    }).catch(err => console.error('SignalR error:', err));
     setHubConnection(connection);
   };
 
   const answerCall = async () => {
-    // Fetch token for this specific room
     try {
-      const response = await fetch(`${BACKEND_URL}/api/token?identity=agent_${username}&room=${incomingRoom}`);
+      await fetch(`${BACKEND_URL}/api/calls/${callSessionId}/transfers/${transferId}/accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ humanAgentId: agentId })
+      });
+
+      const ctxResp = await fetch(`${BACKEND_URL}/api/calls/${callSessionId}/handoffs/${handoffId}`);
+      const ctx = await ctxResp.json();
+      if (ctx.summary) {
+        setHandoffContext(ctx);
+      }
+
+      const response = await fetch(`${BACKEND_URL}/api/livekit/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity: `agent_${agentId}`,
+          roomName: incomingRoom,
+          canPublish: true,
+          canSubscribe: true
+        })
+      });
       const data = await response.json();
-      setLivekitUrl(data.url);
       setActiveToken(data.token);
     } catch (e) {
       console.error(e);
@@ -64,13 +97,17 @@ export default function App() {
   const endCall = () => {
     setActiveToken(null);
     setIncomingRoom(null);
+    setCallSessionId(null);
+    setTransferId(null);
+    setHandoffId(null);
+    setHandoffContext(null);
   };
 
   if (activeToken) {
     return (
       <SafeAreaView style={styles.container}>
         <LiveKitRoom serverUrl={livekitUrl} token={activeToken} connect={true} audio={true}>
-          <ActiveCallView onEndCall={endCall} roomName={incomingRoom} />
+          <ActiveCallView onEndCall={endCall} roomName={incomingRoom} handoffContext={handoffContext} />
         </LiveKitRoom>
       </SafeAreaView>
     );
@@ -80,12 +117,13 @@ export default function App() {
     return (
       <SafeAreaView style={styles.container}>
         <Text style={styles.title}>Agent Dashboard</Text>
-        <Text>Status: Online</Text>
-        
+        <Text>Status: Online - {agentName}</Text>
+
         {incomingRoom ? (
           <View style={styles.callBox}>
             <Text style={styles.ringingText}>Incoming Call!</Text>
             <Text>Room: {incomingRoom}</Text>
+            <Text>Session: {callSessionId}</Text>
             <TouchableOpacity style={styles.answerBtn} onPress={answerCall}>
               <Text style={styles.btnText}>Answer</Text>
             </TouchableOpacity>
@@ -103,8 +141,7 @@ export default function App() {
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Agent Login</Text>
-      <TextInput style={styles.input} value={username} onChangeText={setUsername} placeholder="Username" />
-      <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry />
+      <TextInput style={styles.input} value={accessKey} onChangeText={setAccessKey} placeholder="Access Key" />
       <TouchableOpacity style={styles.btn} onPress={handleLogin}>
         <Text style={styles.btnText}>Login</Text>
       </TouchableOpacity>
@@ -112,13 +149,19 @@ export default function App() {
   );
 }
 
-function ActiveCallView({ onEndCall, roomName }) {
+function ActiveCallView({ onEndCall, roomName, handoffContext }) {
   const room = useRoomContext();
-  
+
   return (
     <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
       <Text style={styles.title}>Active Call</Text>
       <Text>Connected to: {roomName}</Text>
+      {handoffContext && (
+        <View style={styles.contextBox}>
+          <Text style={styles.contextTitle}>Handoff Context:</Text>
+          <Text>{handoffContext.summary || JSON.stringify(handoffContext)}</Text>
+        </View>
+      )}
       <TouchableOpacity style={[styles.btn, {backgroundColor: 'red', marginTop: 20}]} onPress={onEndCall}>
         <Text style={styles.btnText}>End Call</Text>
       </TouchableOpacity>
@@ -135,5 +178,7 @@ const styles = StyleSheet.create({
   callBox: { marginTop: 40, padding: 20, backgroundColor: '#FFE4E1', borderRadius: 10, alignItems: 'center' },
   ringingText: { fontSize: 20, color: 'red', fontWeight: 'bold', marginBottom: 10 },
   answerBtn: { backgroundColor: '#4CAF50', padding: 15, borderRadius: 10, marginTop: 15 },
-  idleBox: { marginTop: 40, alignItems: 'center' }
+  idleBox: { marginTop: 40, alignItems: 'center' },
+  contextBox: { marginTop: 10, padding: 10, backgroundColor: '#f0f0f0', borderRadius: 5, width: '90%' },
+  contextTitle: { fontWeight: 'bold', marginBottom: 5 }
 });

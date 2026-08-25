@@ -11,10 +11,14 @@ namespace backend.Services
     public class StatsService
     {
         private readonly AppDbContext _db;
+        private readonly RedisPresenceService _redisPresence;
+        private readonly LiveKitService _liveKit;
 
-        public StatsService(AppDbContext db)
+        public StatsService(AppDbContext db, RedisPresenceService redisPresence, LiveKitService liveKit)
         {
             _db = db;
+            _redisPresence = redisPresence;
+            _liveKit = liveKit;
         }
 
         public async Task<TodayStatsResponse> GetTodayStatsAsync(Guid userId)
@@ -196,9 +200,25 @@ namespace backend.Services
                 dbHealthy = false;
             }
 
+            var redisHealthy = true;
+            try { redisHealthy = await _redisPresence.IsHealthyAsync(); }
+            catch { redisHealthy = false; }
+
+            var livekitHealthy = "unknown";
+            try
+            {
+                var roomName = "health-check-" + Guid.NewGuid().ToString("N")[..8];
+                await _liveKit.CreateRoom(roomName);
+                livekitHealthy = "healthy";
+                await _liveKit.DeleteRoom(roomName);
+            }
+            catch { livekitHealthy = "degraded"; }
+
             return new HealthCheckResponse(
-                "healthy",
+                dbHealthy && redisHealthy && livekitHealthy == "healthy" ? "healthy" : "degraded",
                 dbHealthy ? "connected" : "disconnected",
+                redisHealthy ? "connected" : "disconnected",
+                livekitHealthy,
                 Environment.TickCount64.ToString(),
                 "1.0.0");
         }

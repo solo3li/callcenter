@@ -77,6 +77,8 @@ namespace backend.Dtos
     public record HealthCheckResponse(
         string Status,
         string Database,
+        string Redis,
+        string Livekit,
         string Uptime,
         string Version
     );

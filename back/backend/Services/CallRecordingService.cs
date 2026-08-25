@@ -9,10 +9,12 @@ namespace backend.Services
     public class CallRecordingService
     {
         private readonly AppDbContext _db;
+        private readonly StorageService _storage;
 
-        public CallRecordingService(AppDbContext db)
+        public CallRecordingService(AppDbContext db, StorageService storage)
         {
             _db = db;
+            _storage = storage;
         }
 
         public async Task<List<CallRecordingDto>> ListForCallAsync(Guid callSessionId)
@@ -96,10 +98,11 @@ namespace backend.Services
             var recording = await _db.CallRecordings
                 .FirstOrDefaultAsync(r => r.Id == recordingId);
 
+            if (recording == null)
+                return new DownloadUrlResponse(string.Empty, DateTime.UtcNow.AddHours(1));
+
             var expiresAt = DateTime.UtcNow.AddHours(1);
-            var url = recording != null
-                ? $"/api/calls/{recording.CallSessionId}/recordings/{recordingId}/download?expires={expiresAt:O}"
-                : string.Empty;
+            var url = await _storage.GeneratePresignedUrlAsync(recording.ObjectKey, 3600);
 
             return new DownloadUrlResponse(url, expiresAt);
         }
