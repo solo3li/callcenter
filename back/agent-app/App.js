@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, ActivityIndicator, ScrollView, Vibration, Platform } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, ScrollView, Vibration, Platform } from 'react-native';
 import * as signalR from '@microsoft/signalr';
-import { LiveKitRoom, useRoomContext, useLocalParticipant } from '@livekit/react-native';
-import { Track } from 'livekit-client';
+
+// LiveKit's react-native SDK uses requireNativeComponent (native-only) — loading it
+// unconditionally crashes web bundles. Metro resolves the unsuffixed specifier per
+// platform: AgentCall.web.js for web, AgentCall.js for iOS/Android — never both.
+const ActiveCall = require('./AgentCall').default;
 
 const BACKEND_URL = Platform.select({
   ios: 'http://localhost:5000',
@@ -331,15 +334,15 @@ export default function App() {
   if (activeToken) {
     return (
       <SafeAreaView style={styles.container}>
-        <LiveKitRoom serverUrl={livekitUrl} token={activeToken} connect={true} audio={true} video={false}>
-          <ActiveCallView
-            onEndCall={endCall}
-            roomName={incomingRoom}
-            handoffContext={handoffContext}
-            muted={muted}
-            onToggleMute={() => setMuted(m => !m)}
-          />
-        </LiveKitRoom>
+        <ActiveCall
+          livekitUrl={livekitUrl}
+          token={activeToken}
+          roomName={incomingRoom}
+          handoffContext={handoffContext}
+          muted={muted}
+          onToggleMute={() => setMuted(m => !m)}
+          onEndCall={endCall}
+        />
       </SafeAreaView>
     );
   }
@@ -463,51 +466,6 @@ export default function App() {
       </TouchableOpacity>
       <Text style={{marginTop: 20, fontSize: 11, color: '#999'}}>Server: {BACKEND_URL}</Text>
     </SafeAreaView>
-  );
-}
-
-function ActiveCallView({ onEndCall, roomName, handoffContext, muted, onToggleMute }) {
-  const [elapsed, setElapsed] = useState(0);
-  const { localParticipant } = useLocalParticipant();
-
-  useEffect(() => {
-    const timer = setInterval(() => setElapsed(s => s + 1), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (localParticipant) {
-      localParticipant.setMicrophoneEnabled(!muted);
-    }
-  }, [muted, localParticipant]);
-
-  const minutes = Math.floor(elapsed / 60);
-  const seconds = elapsed % 60;
-
-  return (
-    <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20}}>
-      <Text style={styles.title}>Active Call</Text>
-      <Text>Connected to: {roomName}</Text>
-      <Text style={{fontSize: 36, fontWeight: 'bold', marginVertical: 10, color: '#333'}}>
-        {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
-      </Text>
-      {handoffContext && (
-        <View style={styles.contextBox}>
-          <Text style={styles.contextTitle}>AI Handoff:</Text>
-          <Text style={{fontSize: 13}}>{handoffContext.summary || JSON.stringify(handoffContext)}</Text>
-        </View>
-      )}
-      <View style={[styles.actionRow, {marginTop: 15}]}>
-        <TouchableOpacity
-          style={[styles.btn, {flex: 1, marginRight: 5, backgroundColor: muted ? '#F44336' : '#2196F3'}]}
-          onPress={onToggleMute}>
-          <Text style={styles.btnText}>{muted ? '🔇 Muted' : '🎤 Mic On'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.btn, {flex: 1, marginLeft: 5, backgroundColor: 'red'}]} onPress={onEndCall}>
-          <Text style={styles.btnText}>End Call</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
   );
 }
 
