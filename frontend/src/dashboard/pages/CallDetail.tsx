@@ -1,20 +1,56 @@
 import { useParams, useNavigate } from "react-router-dom";
 import Badge from "../components/Badge";
-import ProgressBar from "../components/ProgressBar";
-import { CALLS } from "../data";
+import { CALLS, type Call } from "../data";
+import { callsApi } from "../../api/endpoints";
+import type { CallDetail as ApiCallDetail } from "../../api/endpoints";
+import { useApi } from "../../hooks/useApi";
 
-function fmtDuration(s: number): string {
+const API_ENABLED = !!import.meta.env.VITE_API_URL;
+
+function fmtDuration(s: number | null | undefined): string {
+  if (s == null) return "—";
   const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${m}m ${sec}s`;
+  return `${m}m ${s % 60}s`;
 }
+
+function fmtTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+}
+
+const UI_BADGE: Record<string, { label: string; tone: "mint" | "amber" | "coral" | "dim" }> = {
+  "active-ai": { label: "AI — live now", tone: "mint" },
+  "active-human": { label: "Human — live now", tone: "amber" },
+  queued: { label: "Waiting in queue", tone: "coral" },
+  "completed-ai": { label: "Completed", tone: "mint" },
+  "completed-escalated": { label: "Escalated to human", tone: "amber" },
+  missed: { label: "Missed", tone: "coral" },
+  abandoned: { label: "Failed", tone: "dim" },
+};
+
+const API_BADGE: Record<string, { label: string; tone: "mint" | "amber" | "coral" | "dim" }> = {
+  Queued: { label: "Queued", tone: "coral" },
+  Ringing: { label: "Ringing", tone: "amber" },
+  Active: { label: "Active — live now", tone: "mint" },
+  Transferred: { label: "Transferred to human", tone: "amber" },
+  Completed: { label: "Completed", tone: "mint" },
+  Missed: { label: "Missed", tone: "coral" },
+  Failed: { label: "Failed", tone: "coral" },
+};
 
 export default function CallDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const call = CALLS.find((c) => c.id === id);
 
-  if (!call) {
+  const shouldFetchApi = API_ENABLED && id && !CALLS.some((c) => c.id === id);
+  const { data: apiCall, error, loading } = useApi(
+    () => (shouldFetchApi ? callsApi.get(id!) : Promise.resolve(null)),
+    [id]
+  );
+
+  const mockCall: Call | undefined = !shouldFetchApi ? CALLS.find((c) => c.id === id) : undefined;
+
+  if (!loading && !error && !mockCall && !apiCall) {
     return (
       <div className="space-y-6">
         <button onClick={() => navigate(-1)} className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-dim transition-colors hover:text-mist">
@@ -26,243 +62,269 @@ export default function CallDetail() {
     );
   }
 
-  const statusBadge: Record<string, { label: string; tone: "mint" | "amber" | "coral" | "dim" }> = {
-    "active-ai": { label: "AI — live now", tone: "mint" },
-    "active-human": { label: "Human — live now", tone: "amber" },
-    queued: { label: "Waiting in queue", tone: "coral" },
-    "completed-ai": { label: "AI resolved", tone: "mint" },
-    "completed-escalated": { label: "Escalated to human", tone: "amber" },
-    missed: { label: "Missed", tone: "coral" },
-    abandoned: { label: "Abandoned", tone: "dim" },
-  };
+  if (mockCall) {
+    return <MockDetailView call={mockCall} onBack={() => navigate("/dashboard/history")} />;
+  }
 
-  const sb = statusBadge[call.status];
+  if (apiCall) {
+    return <ApiDetailView call={apiCall} onBack={() => navigate("/dashboard/history")} />;
+  }
 
   return (
     <div className="space-y-6">
-      <button
-        onClick={() => navigate("/dashboard/history")}
-        className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-dim transition-colors hover:text-mist"
-      >
-        <svg width="12" height="10" viewBox="0 0 12 10" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M11 5H1M4 1 .5 5 4 9" /></svg>
-        Back to history
+      <button onClick={() => navigate(-1)} className="font-mono text-[11px] uppercase tracking-[0.14em] text-dim hover:text-mist">
+        ← Back
       </button>
+      <p className="font-display text-xl text-mist">{loading ? "Loading call…" : error ?? "—"}</p>
+    </div>
+  );
+}
+
+function MockDetailView({ call, onBack }: { call: Call; onBack: () => void }) {
+  const sb = UI_BADGE[call.status];
+  return (
+    <div className="space-y-6">
+      <BackButton onClick={onBack} />
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="kicker mb-1">// call detail</p>
+          <h1 className="font-display text-2xl font-bold tracking-tight text-mist">{call.callerName}</h1>
+          <p className="mt-1 font-mono text-sm text-dim">{call.callerNumber}</p>
+        </div>
+        <Badge label={sb?.label ?? call.status} tone={sb?.tone ?? "dim"} />
+      </div>
+      <InfoGrid
+        cells={[
+          { label: "Agent", value: call.agentName ? `${call.agentName}${call.agentType ? ` (${call.agentType})` : ""}` : "—" },
+          { label: "Duration", value: fmtDuration(call.duration) },
+          { label: "Wait time", value: `${call.waitTime}s` },
+          { label: "Started", value: fmtTime(call.startTime) },
+        ]}
+      />
+      {call.transcript.length > 0 && (
+        <Section title="transcript">
+          <div className="space-y-2.5">
+            {call.transcript.map((t, i) => (
+              <div key={i} className="flex gap-3">
+                <span className={`w-14 shrink-0 pt-0.5 font-mono text-[9px] uppercase tracking-[0.1em] ${t.role === "caller" ? "text-dim" : t.role === "human" ? "text-amber" : "text-mint"}`}>
+                  {t.role}
+                </span>
+                <p className="text-sm leading-relaxed text-mist/90">{t.text}</p>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+      {call.apiActions.length > 0 && (
+        <Section title="api actions">
+          <ul className="space-y-1.5">
+            {call.apiActions.map((a, i) => (
+              <li key={i} className="font-mono text-[11px] text-dim">
+                [{a.timestamp}] <span className="text-mist/90">{a.action}</span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+    </div>
+  );
+}
+
+function ApiDetailView({ call, onBack }: { call: ApiCallDetail; onBack: () => void }) {
+  const badge = API_BADGE[call.status] ?? { label: call.status, tone: "dim" as const };
+  const humanParticipant = call.participants.find((p) => p.participantType === "Human");
+  const waitSeconds =
+    call.answeredAt
+      ? Math.max(0, Math.round((new Date(call.answeredAt).getTime() - new Date(call.startedAt).getTime()) / 1000))
+      : null;
+
+  let metadataPretty: string | null = null;
+  if (call.metadataJson) {
+    try {
+      metadataPretty = JSON.stringify(JSON.parse(call.metadataJson), null, 2);
+    } catch {
+      metadataPretty = call.metadataJson;
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <BackButton onClick={onBack} />
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="kicker mb-1">// call detail</p>
-          <h1 className="font-display text-2xl font-bold tracking-tight text-mist">
-            {call.callerName}
-          </h1>
-          <p className="mt-1 font-mono text-sm text-dim">{call.callerNumber}</p>
+          <h1 className="font-display text-2xl font-bold tracking-tight text-mist">{call.livekitRoomName}</h1>
+          <p className="mt-1 font-mono text-sm text-dim">
+            {call.direction} · {call.status}
+            {call.callConfigurationName ? ` · ${call.callConfigurationName}` : ""}
+          </p>
         </div>
-        <Badge label={sb.label} tone={sb.tone} />
+        <Badge label={badge.label} tone={badge.tone} />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="border border-line bg-panel/50 p-4">
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim">Agent</p>
-          <p className="mt-1 font-display text-lg font-bold text-mist">
-            {call.agentName ?? "—"}
-            {call.agentType && (
-              <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.1em] text-dim">
-                ({call.agentType})
-              </span>
-            )}
-          </p>
-        </div>
-        <div className="border border-line bg-panel/50 p-4">
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim">Duration</p>
-          <p className="mt-1 font-display text-lg font-bold tabular-nums text-mist">
-            {call.duration ? fmtDuration(call.duration) : "—"}
-          </p>
-        </div>
-        <div className="border border-line bg-panel/50 p-4">
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim">Wait time</p>
-          <p className="mt-1 font-display text-lg font-bold tabular-nums text-mist">
-            {call.waitTime}s
-          </p>
-        </div>
-        <div className="border border-line bg-panel/50 p-4">
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim">CSAT</p>
-          <p className="mt-1 font-display text-lg font-bold tabular-nums text-mist">
-            {call.csat !== null ? `${call.csat} ★` : "—"}
-          </p>
-        </div>
-      </div>
+      <InfoGrid
+        cells={[
+          { label: "Human agent", value: humanParticipant?.displayName ?? call.handoff?.toHumanAgentName ?? call.transfers[0]?.toHumanAgentName ?? "—" },
+          { label: "Duration", value: fmtDuration(call.durationSeconds) },
+          { label: "Wait to answer", value: waitSeconds != null ? `${waitSeconds}s` : "—" },
+          { label: "Participants", value: String(call.participants.length) },
+        ]}
+      />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="border border-line bg-panel/50 p-4">
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim">Intent</p>
-          <p className="mt-1">
-            <Badge label={call.intent} tone={call.agentType === "human" ? "amber" : "mint"} />
-          </p>
-        </div>
-        <div className="border border-line bg-panel/50 p-4">
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim">Confidence</p>
-          <div className="mt-2">
-            <ProgressBar value={call.confidence * 100} tone={call.confidence > 0.8 ? "mint" : call.confidence > 0.5 ? "amber" : "coral"} label="AI confidence" />
-          </div>
-        </div>
-        <div className="border border-line bg-panel/50 p-4">
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim">Sentiment</p>
-          <p className="mt-1 font-display text-lg font-bold text-mist">
-            <span style={{ color: call.sentiment === "positive" ? "var(--color-mint)" : call.sentiment === "negative" ? "var(--color-coral)" : "var(--color-dim)" }}>
-              {call.sentiment === "positive" ? "↑ Positive" : call.sentiment === "negative" ? "↓ Negative" : "— Neutral"}
-            </span>
-          </p>
-        </div>
-        <div className="border border-line bg-panel/50 p-4">
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim">Resolution</p>
-          <p className="mt-1">
-            <Badge
-              label={
-                call.resolution === "ai-resolved" ? "AI resolved"
-                  : call.resolution === "escalated" ? "Escalated"
-                  : call.resolution === "unresolved" ? "Unresolved"
-                  : "In progress"
-              }
-              tone={
-                call.resolution === "ai-resolved" ? "mint"
-                  : call.resolution === "escalated" ? "amber"
-                  : call.resolution === "unresolved" ? "coral"
-                  : "dim"
-              }
-            />
-          </p>
-        </div>
-      </div>
+      <InfoGrid
+        cells={[
+          { label: "Started", value: fmtTime(call.startedAt) },
+          { label: "Answered", value: fmtTime(call.answeredAt ?? null) },
+          { label: "Ended", value: fmtTime(call.endedAt ?? null) },
+          { label: "Created", value: new Date(call.createdAt).toLocaleString() },
+        ]}
+      />
 
-      <div className="border border-line">
-        <div className="border-b border-line bg-panel/40 px-5 py-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-dim">
-            distribution details
-          </p>
-        </div>
-        <div className="grid gap-0 divide-y divide-line/60 sm:grid-cols-2 sm:divide-y-0 sm:divide-x sm:divide-line/60">
-          <div className="p-5 space-y-3">
-            <div>
-              <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim mb-1">Channel</p>
-              <p className="text-sm text-mist">{call.channel}</p>
-            </div>
-            <div>
-              <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim mb-1">Queue</p>
-              <p className="text-sm text-mist capitalize">{call.queue.replace(/-/g, " ")}</p>
-            </div>
-            <div>
-              <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim mb-1">Skill group</p>
-              <p className="text-sm text-mist capitalize">{call.skillGroup.replace(/_/g, " ")}</p>
-            </div>
-            <div>
-              <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim mb-1">Start time</p>
-              <p className="text-sm text-mist">{new Date(call.startTime).toLocaleString()}</p>
-            </div>
-            {call.endTime && (
-              <div>
-                <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim mb-1">End time</p>
-                <p className="text-sm text-mist">{new Date(call.endTime).toLocaleString()}</p>
-              </div>
-            )}
-          </div>
-          <div className="p-5 space-y-3">
-            {call.escalationDelay !== null && (
-              <div>
-                <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim mb-1">Escalation delay</p>
-                <p className="text-sm text-amber">{call.escalationDelay}s — warm transfer</p>
-              </div>
-            )}
-            {call.apiActions.length > 0 && (
-              <div>
-                <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim mb-2">API actions</p>
-                <div className="space-y-1.5">
-                  {call.apiActions.map((a, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="font-mono text-[9px] text-mint tabular-nums">{a.timestamp}</span>
-                      <span className="text-xs text-dim capitalize">{a.action.replace(/_/g, " ")}</span>
-                    </div>
-                  ))}
+      <Section title={`participants (${call.participants.length})`}>
+        {call.participants.length === 0 ? (
+          <Empty>No participants recorded.</Empty>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-line">
+                <Th>Type</Th><Th>Identity</Th><Th>Display name</Th><Th>Joined</Th><Th>Left</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {call.participants.map((p) => (
+                <tr key={p.id} className="border-b border-line/50 last:border-0">
+                  <Td>{p.participantType}</Td>
+                  <Td mono>{p.livekitIdentity}</Td>
+                  <Td>{p.displayName ?? "—"}</Td>
+                  <Td>{fmtTime(p.joinedAt)}</Td>
+                  <Td>{fmtTime(p.leftAt ?? null)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Section>
+
+      <Section title={`transfers (${call.transfers.length})`}>
+        {call.transfers.length === 0 ? (
+          <Empty>No transfers — handled end-to-end by AI.</Empty>
+        ) : (
+          <ul className="space-y-2">
+            {call.transfers.map((t) => (
+              <li key={t.id} className="border border-line bg-deep/60 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-display text-sm font-semibold text-mist">
+                    → {t.toHumanAgentName ?? "Unknown agent"}
+                  </span>
+                  <Badge
+                    label={t.status}
+                    tone={t.status === "Accepted" || t.status === "Completed" ? "mint" : t.status === "Requested" ? "amber" : "coral"}
+                  />
                 </div>
-              </div>
-            )}
-            {call.recordingUrl && (
-              <div>
-                <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim mb-1">Recording</p>
-                <p className="text-xs text-mint">Available — click to play</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {call.transcript.length > 0 && (
-        <div>
-          <div className="mb-4">
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-dim mb-2">
-              waveform
-            </p>
-            <div className="border border-line bg-panel/40 p-4">
-              <div className="flex items-end gap-[2px] h-14">
-                {Array.from({ length: 100 }).map((_, i) => {
-                  const h = 0.2 + Math.sin(i * 0.4) * 0.3 + Math.sin(i * 0.7) * 0.25 + Math.sin(i * 0.15) * 0.2 + Math.random() * 0.1;
-                  const clamped = Math.min(1, Math.max(0.15, h));
-                  const isAgent = i < 15 || (i > 40 && i < 60) || i > 85;
-                  return (
-                    <div
-                      key={i}
-                      className="flex-1 wavebar"
-                      style={{
-                        height: `${clamped * 100}%`,
-                        backgroundColor: isAgent ? "var(--color-mint)" : "var(--color-dim)",
-                        opacity: 0.7,
-                        animationDelay: `${i * 30}ms`,
-                      }}
-                    />
-                  );
-                })}
-              </div>
-              <div className="mt-2 flex justify-between font-mono text-[8px] uppercase tracking-[0.12em] text-dim/60">
-                <span>00:00</span>
-                <span style={{ color: "var(--color-mint)" }}>ai speaking</span>
-                <span>{call.duration ? fmtDuration(call.duration) : "live"}</span>
-              </div>
-            </div>
-          </div>
-
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-dim mb-3">
-            transcript · {call.transcript.length} turns
-          </p>
-          <div className="border border-line divide-y divide-line/40">
-            {call.transcript.map((t, i) => (
-              <div key={i} className="flex gap-4 p-4">
-                <div className="w-16 shrink-0">
-                  <span className="font-mono text-[10px] tabular-nums text-dim">{t.timestamp}</span>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span
-                      className="font-mono text-[10px] uppercase tracking-[0.12em]"
-                      style={{
-                        color:
-                          t.role === "ai"
-                            ? "var(--color-mint)"
-                            : t.role === "human"
-                              ? "var(--color-amber)"
-                              : "var(--color-dim)",
-                      }}
-                    >
-                      {t.role === "ai" ? call.agentName : t.role === "human" ? call.agentName : call.callerName}
-                    </span>
-                    <span className="font-mono text-[8px] text-dim/50">
-                      {Math.round(t.confidence * 100)}% conf
-                    </span>
-                  </div>
-                  <p className="text-sm leading-relaxed text-mist/90">{t.text}</p>
-                </div>
-              </div>
+                <p className="mt-1 font-mono text-[10px] text-dim">
+                  requested {new Date(t.requestedAt).toLocaleString()}
+                  {t.acceptedAt ? ` · accepted ${fmtTime(t.acceptedAt)}` : ""}
+                  {t.reason ? ` · ${t.reason}` : ""}
+                  {t.failureReason ? ` · failed: ${t.failureReason}` : ""}
+                </p>
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
+        )}
+      </Section>
+
+      <Section title={`recordings (${call.recordings.length})`}>
+        {call.recordings.length === 0 ? (
+          <Empty>No recordings for this call.</Empty>
+        ) : (
+          <ul className="space-y-2">
+            {call.recordings.map((r) => (
+              <li key={r.id} className="flex items-center justify-between border border-line bg-deep/60 px-3 py-2.5">
+                <div>
+                  <p className="font-mono text-[11px] text-mist">{r.objectKey}</p>
+                  <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-dim">
+                    {r.storageProvider} · {fmtDuration(r.durationSeconds)} · {r.sizeBytes ? `${Math.round(r.sizeBytes / 1024)} KB` : "?"}
+                  </p>
+                </div>
+                <Badge label={r.status} tone={r.status === "Available" ? "mint" : "amber"} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      {call.handoff && (
+        <Section title="ai handoff context">
+          <p className="text-sm leading-relaxed text-mist/90">{call.handoff.summary ?? "No summary."}</p>
+          {call.handoff.contextDataJson && (
+            <pre className="mt-3 overflow-x-auto border border-line bg-deep p-3 font-mono text-[10px] leading-relaxed text-dim">
+              {safeJson(call.handoff.contextDataJson)}
+            </pre>
+          )}
+        </Section>
+      )}
+
+      {metadataPretty && (
+        <Section title="metadata">
+          <pre className="overflow-x-auto border border-line bg-deep p-3 font-mono text-[10px] leading-relaxed text-dim">
+            {metadataPretty}
+          </pre>
+        </Section>
       )}
     </div>
+  );
+}
+
+function safeJson(raw: string): string {
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
+}
+
+function BackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-dim transition-colors hover:text-mist">
+      <svg width="12" height="10" viewBox="0 0 12 10" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M11 5H1M4 1 .5 5 4 9" /></svg>
+      Back to history
+    </button>
+  );
+}
+
+function InfoGrid({ cells }: { cells: { label: string; value: string }[] }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {cells.map((c) => (
+        <div key={c.label} className="border border-line bg-panel/50 p-4">
+          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim">{c.label}</p>
+          <p className="mt-1 truncate font-display text-lg font-bold tabular-nums text-mist">{c.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="border border-line bg-panel/40 p-5">
+      <p className="mb-4 font-mono text-[10px] uppercase tracking-[0.18em] text-dim">{title}</p>
+      {children}
+    </div>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="font-mono text-[11px] text-dim">{children}</p>;
+}
+
+function Th({ children }: { children: React.ReactNode }) {
+  return <th className="pb-2 pr-4 text-left font-mono text-[9px] uppercase tracking-[0.14em] text-dim">{children}</th>;
+}
+
+function Td({ children, mono }: { children: React.ReactNode; mono?: boolean }) {
+  return (
+    <td className={`py-2 pr-4 text-xs ${mono ? "font-mono text-[11px]" : ""} text-mist/90`}>{children}</td>
   );
 }

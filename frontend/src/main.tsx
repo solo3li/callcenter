@@ -9,6 +9,9 @@ import AgentRoster from "./dashboard/pages/AgentRoster";
 import Analytics from "./dashboard/pages/Analytics";
 import CallHistory from "./dashboard/pages/CallHistory";
 import CallDetail from "./dashboard/pages/CallDetail";
+import LoginPage from "./pages/LoginPage";
+import { AuthProvider } from "./auth/AuthContext";
+import RequireAuth from "./auth/RequireAuth";
 
 import ApiStatus from "./components/ApiStatus";
 
@@ -18,8 +21,16 @@ const router = createBrowserRouter([
     element: <LandingPage />,
   },
   {
+    path: "/login",
+    element: <LoginPage />,
+  },
+  {
     path: "/dashboard",
-    element: <DashboardLayout />,
+    element: (
+      <RequireAuth>
+        <DashboardLayout />
+      </RequireAuth>
+    ),
     children: [
       { index: true, element: <LiveBoard /> },
       { path: "live", element: <LiveBoard /> },
@@ -33,7 +44,9 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ApiStatus />
-    <RouterProvider router={router} />
+    <AuthProvider>
+      <ApiStatus />
+      <RouterProvider router={router} />
+    </AuthProvider>
   </StrictMode>
 );

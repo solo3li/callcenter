@@ -2,8 +2,9 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import CallRow from "../components/CallRow";
 import { CALLS, type Call } from "../data";
-import { callsApi, CallSession } from "../../api/endpoints";
+import { callsApi } from "../../api/endpoints";
 import { useApi } from "../../hooks/useApi";
+import { sessionToUiCall } from "../statusMap";
 
 const API_ENABLED = !!import.meta.env.VITE_API_URL;
 
@@ -15,36 +16,14 @@ export default function CallHistory() {
   const [page, setPage] = useState(0);
   const PER_PAGE = 10;
 
-  const { data: apiCalls } = useApi(
+  const { data: apiCalls, error: apiError, loading } = useApi(
     () => callsApi.list({ limit: 100 }),
     []
   );
 
-  const allCalls = API_ENABLED && apiCalls?.items ? apiCalls.items.map((s: CallSession) => ({
-    id: s.id,
-    callerName: "Caller",
-    callerNumber: s.livekitRoomName,
-    status: s.status as Call["status"],
-    duration: s.durationSeconds,
-    agentId: null,
-    agentName: null,
-    agentType: null as "ai" | "human" | null,
-    intent: "",
-    confidence: 0,
-    sentiment: "neutral" as "positive" | "neutral" | "negative",
-    transcript: [],
-    startTime: s.startedAt,
-    endTime: s.endedAt ?? null,
-    waitTime: 0,
-    resolution: null as "ai-resolved" | "escalated" | "unresolved" | null,
-    csat: null,
-    channel: "",
-    queue: "",
-    skillGroup: "",
-    escalationDelay: null,
-    apiActions: [],
-    recordingUrl: null,
-  })) : CALLS;
+  const allCalls: Call[] = API_ENABLED && apiCalls?.items
+    ? apiCalls.items.map(sessionToUiCall)
+    : CALLS;
 
   const filtered = useMemo(() => {
     let result = allCalls;
@@ -138,28 +117,36 @@ export default function CallHistory() {
       </div>
 
       <div className="border border-line">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-line bg-panel/40">
-              <th className="py-3 pr-4 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-dim pl-5">Caller</th>
-              <th className="py-3 pr-4 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-dim">Number</th>
-              <th className="py-3 pr-4 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-dim">Duration</th>
-              <th className="py-3 pr-4 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-dim">Agent</th>
-              <th className="py-3 pr-4 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-dim">Intent</th>
-              <th className="py-3 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-dim pr-5">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paged.map((c) => (
-              <CallRow
-                key={c.id}
-                call={c}
-                isLive={c.status === "active-ai" || c.status === "active-human" || c.status === "queued"}
-                onClick={() => navigate(`/dashboard/call/${c.id}`)}
-              />
-            ))}
-          </tbody>
-        </table>
+        {API_ENABLED && apiError ? (
+          <p className="px-5 py-8 text-center font-mono text-[11px] text-coral">{apiError}</p>
+        ) : loading && API_ENABLED ? (
+          <p className="px-5 py-8 text-center font-mono text-[11px] text-dim">loading calls…</p>
+        ) : paged.length === 0 ? (
+          <p className="px-5 py-8 text-center font-mono text-[11px] text-dim">no calls match your filters</p>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-line bg-panel/40">
+                <th className="py-3 pr-4 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-dim pl-5">Caller</th>
+                <th className="py-3 pr-4 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-dim">Number</th>
+                <th className="py-3 pr-4 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-dim">Duration</th>
+                <th className="py-3 pr-4 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-dim">Agent</th>
+                <th className="py-3 pr-4 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-dim">Intent</th>
+                <th className="py-3 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-dim pr-5">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paged.map((c) => (
+                <CallRow
+                  key={c.id}
+                  call={c}
+                  isLive={c.status === "active-ai" || c.status === "active-human" || c.status === "queued"}
+                  onClick={() => navigate(`/dashboard/call/${c.id}`)}
+                />
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {totalPages > 1 && (

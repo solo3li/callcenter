@@ -2,46 +2,98 @@ import api from './client';
 
 export interface CallSession {
   id: string;
+  userId: string;
+  callConfigurationId?: string | null;
   livekitRoomName: string;
-  status: string;
-  direction: string;
+  status: ApiCallStatus;
+  direction: 'Inbound' | 'Outbound';
   startedAt: string;
-  endedAt?: string;
-  answeredAt?: string;
-  durationSeconds?: number;
-  metadataJson?: string;
+  answeredAt?: string | null;
+  endedAt?: string | null;
+  durationSeconds?: number | null;
+  metadataJson?: string | null;
+  participantCount?: number;
+  createdAt: string;
+}
+
+export type ApiCallStatus =
+  | 'Queued'
+  | 'Ringing'
+  | 'Active'
+  | 'Transferred'
+  | 'Completed'
+  | 'Missed'
+  | 'Failed'
+  | string;
+
+export interface CallParticipantDto {
+  id: string;
+  humanAgentId?: string | null;
+  participantType: string;
+  livekitIdentity: string;
+  livekitParticipantSid?: string | null;
+  displayName?: string | null;
+  joinedAt: string;
+  leftAt?: string | null;
+  createdAt: string;
+}
+
+export interface CallTransferDto {
+  id: string;
+  callSessionId: string;
+  fromParticipantId?: string | null;
+  toHumanAgentId?: string | null;
+  toHumanAgentName?: string | null;
+  status: string;
+  reason?: string | null;
+  failureReason?: string | null;
+  requestedAt: string;
+  acceptedAt?: string | null;
+  completedAt?: string | null;
+  failedAt?: string | null;
+}
+
+export interface CallRecordingDto {
+  id: string;
+  storageProvider: string;
+  objectKey: string;
+  contentType?: string | null;
+  durationSeconds?: number | null;
+  sizeBytes?: number | null;
+  status: string;
+  createdAt: string;
+  completedAt?: string | null;
+}
+
+export interface CallHandoffDto {
+  id: string;
+  callTransferId?: string | null;
+  toHumanAgentName?: string | null;
+  reason?: string | null;
+  summary?: string | null;
+  contextDataJson?: string | null;
+  status: string;
+  createdAt: string;
 }
 
 export interface CallDetail extends CallSession {
-  participants: CallParticipant[];
-  transfers: CallTransfer[];
-  recordings: CallRecording[];
+  callConfigurationName?: string | null;
+  livekitRoomSid?: string | null;
+  participants: CallParticipantDto[];
+  transfers: CallTransferDto[];
+  recordings: CallRecordingDto[];
+  handoff?: CallHandoffDto | null;
 }
 
-export interface CallParticipant {
+export interface ActiveCallDto {
   id: string;
-  participantType: string;
-  livekitIdentity: string;
-  displayName?: string;
-  joinedAt: string;
-  leftAt?: string;
-}
-
-export interface CallTransfer {
-  id: string;
-  status: string;
-  reason?: string;
-  toHumanAgentName: string;
-  requestedAt: string;
-  acceptedAt?: string;
-}
-
-export interface CallRecording {
-  id: string;
-  objectKey: string;
-  durationSeconds?: number;
-  sizeBytes?: number;
-  status: string;
+  livekitRoomName: string;
+  status: ApiCallStatus;
+  direction: 'Inbound' | 'Outbound';
+  startedAt: string;
+  answeredAt?: string | null;
+  durationSeconds?: number | null;
+  participantCount: number;
   createdAt: string;
 }
 
@@ -54,20 +106,62 @@ export interface Agent {
 }
 
 export interface TodayStats {
-  total: number;
-  active: number;
-  answered: number;
-  transferred: number;
-  missed: number;
+  totalCalls: number;
+  activeCalls: number;
+  answeredCalls: number;
+  transferredCalls: number;
+  missedCalls: number;
   avgDurationSeconds: number;
   agentsOnline: number;
   hourly: { hour: string; count: number }[];
 }
 
+export interface HourlyDataPoint {
+  hour: string;
+  count: number;
+}
+
+export interface PeriodStats {
+  from: string;
+  to: string;
+  totalCalls: number;
+  completedCalls: number;
+  avgDurationSeconds: number;
+  hourly: HourlyDataPoint[];
+}
+
+export interface IntentStats {
+  intent: string;
+  count: number;
+  percentage: number;
+}
+
+export interface AgentStatsDto {
+  agentId: string;
+  name: string;
+  status: string;
+  totalCalls: number;
+  avgDurationSeconds: number;
+  lastActiveAt?: string | null;
+}
+
 export interface QueueStats {
   activeCount: number;
   agentsOnline: number;
-  activeCalls: { id: string; roomName: string; status: string; durationSeconds: number }[];
+  activeCalls: ActiveCallDto[];
+  agents: { id: string; name: string; status: string }[];
+}
+
+export interface QueueUpdateEvent {
+  activeCount: number;
+  agentsOnline: number;
+  activeCalls: {
+    id: string;
+    roomName: string;
+    status: ApiCallStatus;
+    startTime: string;
+    durationSeconds: number;
+  }[];
   agents: { id: string; name: string; status: string }[];
 }
 
@@ -79,8 +173,20 @@ export interface AuthResponse {
     id: string;
     email: string;
     displayName: string;
-    companyName?: string;
+    companyName?: string | null;
   };
+}
+
+export interface UserDto {
+  id: string;
+  email: string;
+  displayName: string;
+  companyName?: string | null;
+  status: string;
+  isPartner: boolean;
+  standardCredits: number;
+  premiumCredits: number;
+  createdAt: string;
 }
 
 export const authApi = {
@@ -88,13 +194,24 @@ export const authApi = {
     api.post<AuthResponse>('/api/auth/login', { email, password }),
   register: (data: { email: string; password: string; displayName: string }) =>
     api.post<AuthResponse>('/api/auth/register', data),
-  me: () => api.get<AuthResponse['user']>('/api/auth/me'),
+  me: () => api.get<UserDto>('/api/auth/me'),
 };
 
 export const statsApi = {
   today: () => api.get<TodayStats>('/api/stats/today'),
   queue: () => api.get<QueueStats>('/api/stats/queue'),
-  agents: () => api.get<Agent[]>('/api/stats/agents'),
+  agents: () => api.get<AgentStatsDto[]>('/api/stats/agents'),
+  hourly: (date?: string) =>
+    api.get<HourlyDataPoint[]>(`/api/stats/hourly${date ? `?date=${encodeURIComponent(date)}` : ''}`),
+  period: (from: string, to: string) =>
+    api.get<PeriodStats>(`/api/stats/period?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+  intents: (from?: string, to?: string) => {
+    const qs = new URLSearchParams();
+    if (from) qs.set('from', from);
+    if (to) qs.set('to', to);
+    const query = qs.toString();
+    return api.get<IntentStats[]>(`/api/stats/intents${query ? `?${query}` : ''}`);
+  },
 };
 
 export const callsApi = {
@@ -103,15 +220,15 @@ export const callsApi = {
     if (params?.status) qs.set('status', params.status);
     if (params?.page) qs.set('page', String(params.page));
     if (params?.limit) qs.set('limit', String(params.limit));
-    return api.get<{ items: CallSession[]; total: number; page: number; pages: number }>(
+    return api.get<{ items: CallSession[]; totalCount: number; page: number; limit: number }>(
       `/api/calls?${qs}`
     );
   },
   get: (id: string) => api.get<CallDetail>(`/api/calls/${id}`),
-  active: () => api.get<CallSession[]>('/api/calls/active'),
+  active: () => api.get<ActiveCallDto[]>('/api/calls/active'),
   end: (id: string) => api.post(`/api/calls/${id}/end`),
 };
 
-export const agentsApi = {
+export const humanAgentsApi = {
   list: () => api.get<Agent[]>('/api/human-agents'),
 };

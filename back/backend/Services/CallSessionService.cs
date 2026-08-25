@@ -155,7 +155,7 @@ namespace backend.Services
 
         public async Task<List<ActiveCallDto>> GetActiveAsync(Guid userId)
         {
-            var activeStatuses = new[]
+            var activeStatuses = new List<CallSessionStatus>
             {
                 CallSessionStatus.Queued,
                 CallSessionStatus.Ringing,
@@ -165,6 +165,7 @@ namespace backend.Services
 
             return await _db.CallSessions
                 .Where(c => c.UserId == userId && activeStatuses.Contains(c.Status))
+                .OrderByDescending(c => c.StartedAt)
                 .Select(c => new ActiveCallDto(
                     c.Id,
                     c.LivekitRoomName,
@@ -173,10 +174,9 @@ namespace backend.Services
                     c.StartedAt,
                     c.AnsweredAt,
                     c.DurationSeconds,
-                    c.Participants.Count,
+                    _db.CallParticipants.Count(p => p.CallSessionId == c.Id),
                     c.CreatedAt
                 ))
-                .OrderByDescending(c => c.StartedAt)
                 .ToListAsync();
         }
 

@@ -1,4 +1,5 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 
 const LINKS = [
   { to: "/dashboard/live", label: "Live Wallboard", icon: "▣" },
@@ -15,6 +16,14 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
   }`;
 
 export default function DashboardSidebar() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login", { replace: true });
+  };
+
   return (
     <aside className="fixed inset-y-0 left-0 z-40 flex w-[220px] flex-col border-r border-line bg-deep">
       <div className="flex h-16 items-center gap-2.5 border-b border-line px-5">
@@ -34,16 +43,33 @@ export default function DashboardSidebar() {
         ))}
       </nav>
 
-      <div className="border-t border-line p-4">
+      <div className="space-y-3 border-t border-line p-4">
+        {user && (
+          <div className="border border-line px-3 py-2.5">
+            <p className="truncate font-display text-sm font-semibold text-mist">
+              {user.displayName}
+            </p>
+            <p className="truncate font-mono text-[10px] text-dim">{user.email}</p>
+          </div>
+        )}
         <div className="flex items-center gap-2 border border-line px-3 py-2">
           <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-mint" />
           <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-dim">
             all systems online
           </span>
         </div>
+        <button
+          onClick={handleLogout}
+          className="flex w-full items-center gap-2 border border-line px-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] text-dim transition-colors hover:border-coral/50 hover:text-coral"
+        >
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6">
+            <path d="M4.5 1H1v10h3.5M8 8l3-2-3-2M11 6H4.5" />
+          </svg>
+          sign out
+        </button>
         <NavLink
           to="/"
-          className="mt-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-dim transition-colors hover:text-mist"
+          className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-dim transition-colors hover:text-mist"
         >
           <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8">
             <path d="M11 1H1m3 3-3-3 3-3" />
