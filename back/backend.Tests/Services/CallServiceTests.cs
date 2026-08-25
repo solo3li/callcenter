@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
@@ -26,12 +27,31 @@ namespace backend.Tests.Services
 
         private Mock<IHubContext<CallHub>> CreateMockHub()
         {
-            var mockHub = new Mock<IHubContext<CallHub>>();
-            var mockClients = new Mock<IHubClients>();
             var mockClientProxy = new Mock<IClientProxy>();
-            mockHub.Setup(h => h.Clients).Returns(mockClients.Object);
+            mockClientProxy.Setup(c => c.SendCoreAsync(
+                It.IsAny<string>(),
+                It.IsAny<object[]>(),
+                It.IsAny<CancellationToken>()
+            )).Returns(Task.CompletedTask);
+
+            var mockGroupManager = new Mock<IGroupManager>();
+
+            var mockGroups = new Mock<IClientProxy>();
+            mockGroups.Setup(c => c.SendCoreAsync(
+                It.IsAny<string>(),
+                It.IsAny<object[]>(),
+                It.IsAny<CancellationToken>()
+            )).Returns(Task.CompletedTask);
+
+            var mockClients = new Mock<IHubClients>();
             mockClients.Setup(c => c.All).Returns(mockClientProxy.Object);
-            return mockHub;
+            mockClients.Setup(c => c.Group(It.IsAny<string>())).Returns(mockGroups.Object);
+
+            var mockHubContext = new Mock<IHubContext<CallHub>>();
+            mockHubContext.Setup(h => h.Clients).Returns(mockClients.Object);
+            mockHubContext.Setup(h => h.Groups).Returns(mockGroupManager.Object);
+
+            return mockHubContext;
         }
 
         private async Task<(User, HumanAgent)> SeedUserAndAgent(AppDbContext db)

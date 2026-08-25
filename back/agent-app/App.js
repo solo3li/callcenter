@@ -12,6 +12,7 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [hubConnection, setHubConnection] = useState(null);
   const [agentName, setAgentName] = useState('');
+  const [agentStatus, setAgentStatus] = useState('Online');
 
   const [incomingRoom, setIncomingRoom] = useState(null);
   const [callSessionId, setCallSessionId] = useState(null);
@@ -45,12 +46,13 @@ export default function App() {
 
   const setupSignalR = (agentId) => {
     const connection = new signalR.HubConnectionBuilder()
-      .withUrl(`${BACKEND_URL}/hubs/call?agent_id=${agentId}`)
+      .withUrl(`${BACKEND_URL}/hubs/call`)
       .withAutomaticReconnect()
       .build();
 
     connection.on('IncomingTransfer', (data) => {
-      console.log('Incoming transfer:', data);
+      if (data.toHumanAgentId !== agentId) return;
+      console.log('Incoming transfer for me:', data);
       setCallSessionId(data.callSessionId);
       setTransferId(data.transferId);
       setHandoffId(data.handoffId);
@@ -89,9 +91,30 @@ export default function App() {
       });
       const data = await response.json();
       setActiveToken(data.token);
+      setAgentStatus('In Call');
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const rejectCall = async () => {
+    try {
+      await fetch(`${BACKEND_URL}/api/calls/${callSessionId}/transfers/${transferId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ humanAgentId: agentId })
+      });
+      clearIncoming();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const clearIncoming = () => {
+    setIncomingRoom(null);
+    setCallSessionId(null);
+    setTransferId(null);
+    setHandoffId(null);
   };
 
   const endCall = () => {
@@ -101,6 +124,7 @@ export default function App() {
     setTransferId(null);
     setHandoffId(null);
     setHandoffContext(null);
+    setAgentStatus('Online');
   };
 
   if (activeToken) {
@@ -117,16 +141,21 @@ export default function App() {
     return (
       <SafeAreaView style={styles.container}>
         <Text style={styles.title}>Agent Dashboard</Text>
-        <Text>Status: Online - {agentName}</Text>
-
+        <Text>Status: {agentStatus} - {agentName}</Text>
+        
         {incomingRoom ? (
           <View style={styles.callBox}>
             <Text style={styles.ringingText}>Incoming Call!</Text>
             <Text>Room: {incomingRoom}</Text>
             <Text>Session: {callSessionId}</Text>
-            <TouchableOpacity style={styles.answerBtn} onPress={answerCall}>
-              <Text style={styles.btnText}>Answer</Text>
-            </TouchableOpacity>
+            <View style={styles.actionRow}>
+              <TouchableOpacity style={styles.answerBtn} onPress={answerCall}>
+                <Text style={styles.btnText}>Answer</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.rejectBtn} onPress={rejectCall}>
+                <Text style={styles.btnText}>Reject</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         ) : (
           <View style={styles.idleBox}>
@@ -177,7 +206,9 @@ const styles = StyleSheet.create({
   btnText: { color: 'white', fontWeight: 'bold' },
   callBox: { marginTop: 40, padding: 20, backgroundColor: '#FFE4E1', borderRadius: 10, alignItems: 'center' },
   ringingText: { fontSize: 20, color: 'red', fontWeight: 'bold', marginBottom: 10 },
-  answerBtn: { backgroundColor: '#4CAF50', padding: 15, borderRadius: 10, marginTop: 15 },
+  answerBtn: { backgroundColor: '#4CAF50', padding: 15, borderRadius: 10, marginTop: 15, flex: 1, marginRight: 5 },
+  rejectBtn: { backgroundColor: '#F44336', padding: 15, borderRadius: 10, marginTop: 15, flex: 1, marginLeft: 5 },
+  actionRow: { flexDirection: 'row', marginTop: 10 },
   idleBox: { marginTop: 40, alignItems: 'center' },
   contextBox: { marginTop: 10, padding: 10, backgroundColor: '#f0f0f0', borderRadius: 5, width: '90%' },
   contextTitle: { fontWeight: 'bold', marginBottom: 5 }

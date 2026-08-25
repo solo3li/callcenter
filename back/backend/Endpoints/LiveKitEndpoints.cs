@@ -1,5 +1,8 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using backend.Data;
+using backend.Models.Enums;
 using backend.Services;
 
 namespace backend.Endpoints
@@ -12,8 +15,24 @@ namespace backend.Endpoints
 
             group.MapPost("/token", async (
                 [FromBody] LiveKitTokenRequest request,
-                LiveKitService service) =>
+                LiveKitService service,
+                AppDbContext db) =>
             {
+                if (request.Identity.StartsWith("agent_"))
+                {
+                    var agentIdStr = request.Identity["agent_".Length..];
+                    if (!Guid.TryParse(agentIdStr, out var agentId))
+                        return Results.BadRequest(new { error = "Invalid agent identity" });
+
+                    var hasTransfer = await db.CallTransfers.AnyAsync(t =>
+                        t.Status == CallTransferStatus.Accepted &&
+                        t.ToHumanAgentId == agentId &&
+                        t.CallSession.LivekitRoomName == request.RoomName);
+
+                    if (!hasTransfer)
+                        return Results.Forbid();
+                }
+
                 var token = service.GenerateToken(
                     request.Identity,
                     request.RoomName,

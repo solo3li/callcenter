@@ -29,12 +29,14 @@ namespace backend.Middleware
 
             if (path.StartsWith("/api/auth/register") ||
                 path.StartsWith("/api/auth/login") ||
+                path.StartsWith("/api/auth/agent-login") ||
                 path.StartsWith("/api/health") ||
                 path.StartsWith("/api/version") ||
                 path.StartsWith("/hubs/") ||
                 path.StartsWith("/hangfire") ||
+                path.StartsWith("/swagger") ||
                 path.StartsWith("/api/token") ||
-                path.StartsWith("/api/agent/") ||
+                path.StartsWith("/api/livekit/") ||
                 path.StartsWith("/api/call/"))
             {
                 await _next(context);

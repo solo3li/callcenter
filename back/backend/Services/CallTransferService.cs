@@ -69,7 +69,7 @@ namespace backend.Services
 
             await _db.SaveChangesAsync();
 
-            await _hub.Clients.All.SendAsync("IncomingTransfer", new
+            await _hub.Clients.Group($"agent_{availableAgent.Id}").SendAsync("IncomingTransfer", new
             {
                 transferId = transfer.Id,
                 handoffId = handoff.Id,
@@ -125,11 +125,20 @@ namespace backend.Services
             var session = await _db.CallSessions
                 .FirstOrDefaultAsync(c => c.Id == transfer.CallSessionId);
 
-            if (session != null && session.Status == CallSessionStatus.Queued)
+            if (session != null)
             {
-                session.Status = CallSessionStatus.Transferred;
-                session.AnsweredAt = DateTime.UtcNow;
+                if (session.Status == CallSessionStatus.Queued)
+                {
+                    session.Status = CallSessionStatus.Transferred;
+                    session.AnsweredAt = DateTime.UtcNow;
+                }
+                if (session.Status == CallSessionStatus.Active)
+                {
+                    session.Status = CallSessionStatus.Transferred;
+                }
             }
+
+            transfer.ToHumanAgent.Status = HumanAgentStatus.InCall;
 
             await _db.SaveChangesAsync();
 
@@ -219,7 +228,7 @@ namespace backend.Services
             _db.CallHandoffs.Add(newHandoff);
             await _db.SaveChangesAsync();
 
-            await _hub.Clients.All.SendAsync("IncomingTransfer", new
+            await _hub.Clients.Group($"agent_{nextAgent.Id}").SendAsync("IncomingTransfer", new
             {
                 transferId = newTransfer.Id,
                 handoffId = newHandoff.Id,
@@ -277,6 +286,8 @@ namespace backend.Services
 
             if (handoff != null)
                 handoff.Status = HandoffStatus.Accepted;
+
+            transfer.ToHumanAgent.Status = HumanAgentStatus.Available;
 
             await _db.SaveChangesAsync();
 
