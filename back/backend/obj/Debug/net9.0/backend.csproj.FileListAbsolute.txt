@@ -138,3 +138,4 @@ C:\Users\solo\Desktop\testviop\back\backend\obj\Debug\net9.0\refint\backend.dll
 C:\Users\solo\Desktop\testviop\back\backend\obj\Debug\net9.0\backend.pdb
 C:\Users\solo\Desktop\testviop\back\backend\obj\Debug\net9.0\backend.genruntimeconfig.cache
 C:\Users\solo\Desktop\testviop\back\backend\obj\Debug\net9.0\ref\backend.dll
+C:\Users\solo\Desktop\testviop\back\backend\bin\Debug\net9.0\BCrypt.Net-Next.dll
