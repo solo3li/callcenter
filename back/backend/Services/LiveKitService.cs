@@ -19,6 +19,9 @@ namespace backend.Services
             _apiKey = Environment.GetEnvironmentVariable("LIVEKIT_API_KEY") ?? "devkey";
             _apiSecret = Environment.GetEnvironmentVariable("LIVEKIT_API_SECRET") ?? "secret";
             _host = Environment.GetEnvironmentVariable("LIVEKIT_URL") ?? "http://livekit:7880";
+
+            if (_apiKey == "devkey" || _apiSecret == "secret")
+                Console.WriteLine("WARNING: LiveKitService is using fallback API credentials. Set LIVEKIT_API_KEY and LIVEKIT_API_SECRET environment variables.");
         }
 
         public string GenerateToken(string identity, string roomName, bool canPublish, bool canSubscribe)

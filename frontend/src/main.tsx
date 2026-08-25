@@ -10,6 +10,8 @@ import Analytics from "./dashboard/pages/Analytics";
 import CallHistory from "./dashboard/pages/CallHistory";
 import CallDetail from "./dashboard/pages/CallDetail";
 
+import ApiStatus from "./components/ApiStatus";
+
 const router = createBrowserRouter([
   {
     path: "/",
@@ -31,6 +33,7 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
+    <ApiStatus />
     <RouterProvider router={router} />
   </StrictMode>
 );

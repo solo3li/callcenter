@@ -25,6 +25,18 @@ using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
+if (!builder.Environment.IsDevelopment())
+{
+    var required = new[] { "JWT_SECRET", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET" };
+    foreach (var key in required)
+    {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(key)))
+        {
+            Console.WriteLine($"WARNING: Required environment variable '{key}' is not set!");
+        }
+    }
+}
+
 builder.Services.AddCors(options => {
     options.AddDefaultPolicy(policy => {
         if (builder.Environment.IsDevelopment())

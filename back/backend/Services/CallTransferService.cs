@@ -349,7 +349,7 @@ namespace backend.Services
 
         private async Task<HumanAgent?> FindAvailableAgentAsync(Guid ownerUserId, Guid? excludeAgentId = null)
         {
-            var busyStatuses = new[] { CallTransferStatus.Requested, CallTransferStatus.Ringing, CallTransferStatus.Accepted };
+            var busyStatuses = new List<CallTransferStatus> { CallTransferStatus.Requested, CallTransferStatus.Ringing, CallTransferStatus.Accepted };
 
             var agents = await _db.HumanAgents
                 .Where(a => a.OwnerUserId == ownerUserId

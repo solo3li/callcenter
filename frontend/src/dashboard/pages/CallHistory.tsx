@@ -1,7 +1,11 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import CallRow from "../components/CallRow";
-import { CALLS } from "../data";
+import { CALLS, type Call } from "../data";
+import { callsApi, CallSession } from "../../api/endpoints";
+import { useApi } from "../../hooks/useApi";
+
+const API_ENABLED = !!import.meta.env.VITE_API_URL;
 
 export default function CallHistory() {
   const navigate = useNavigate();
@@ -11,8 +15,39 @@ export default function CallHistory() {
   const [page, setPage] = useState(0);
   const PER_PAGE = 10;
 
+  const { data: apiCalls } = useApi(
+    () => callsApi.list({ limit: 100 }),
+    []
+  );
+
+  const allCalls = API_ENABLED && apiCalls?.items ? apiCalls.items.map((s: CallSession) => ({
+    id: s.id,
+    callerName: "Caller",
+    callerNumber: s.livekitRoomName,
+    status: s.status as Call["status"],
+    duration: s.durationSeconds,
+    agentId: null,
+    agentName: null,
+    agentType: null as "ai" | "human" | null,
+    intent: "",
+    confidence: 0,
+    sentiment: "neutral" as "positive" | "neutral" | "negative",
+    transcript: [],
+    startTime: s.startedAt,
+    endTime: s.endedAt ?? null,
+    waitTime: 0,
+    resolution: null as "ai-resolved" | "escalated" | "unresolved" | null,
+    csat: null,
+    channel: "",
+    queue: "",
+    skillGroup: "",
+    escalationDelay: null,
+    apiActions: [],
+    recordingUrl: null,
+  })) : CALLS;
+
   const filtered = useMemo(() => {
-    let result = CALLS;
+    let result = allCalls;
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -34,7 +69,7 @@ export default function CallHistory() {
       result = result.filter((c) => new Date(c.startTime).getTime() > cutoff);
     }
     return result;
-  }, [search, statusFilter, dateFilter]);
+  }, [search, statusFilter, dateFilter, allCalls]);
 
   const totalPages = Math.ceil(filtered.length / PER_PAGE);
   const paged = filtered.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
@@ -65,6 +100,12 @@ export default function CallHistory() {
           <span className="ml-3 text-base font-normal text-dim">
             {filtered.length} calls
           </span>
+          {API_ENABLED && apiCalls && (
+            <span className="ml-3 inline-flex items-center gap-1.5 rounded-full border border-mint/30 bg-mint/10 px-2.5 py-0.5 text-[10px] font-mono font-normal uppercase tracking-[0.12em] text-mint">
+              <span className="h-1.5 w-1.5 rounded-full bg-mint animate-pulse" />
+              Live API
+            </span>
+          )}
         </h1>
       </div>
 

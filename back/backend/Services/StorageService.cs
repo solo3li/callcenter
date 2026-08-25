@@ -25,7 +25,7 @@ namespace backend.Services
                 .Build();
         }
 
-        public async Task<string> GeneratePresignedUrlAsync(string objectKey, int expirySeconds = 900)
+        public virtual async Task<string> GeneratePresignedUrlAsync(string objectKey, int expirySeconds = 900)
         {
             var args = new PresignedGetObjectArgs()
                 .WithBucket(_bucketName)

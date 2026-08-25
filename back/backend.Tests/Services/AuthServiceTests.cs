@@ -8,8 +8,18 @@ using Xunit;
 
 namespace backend.Tests.Services
 {
-    public class AuthServiceTests
+    public class AuthServiceTests : IDisposable
     {
+        public AuthServiceTests()
+        {
+            Environment.SetEnvironmentVariable("JWT_SECRET", "this-is-a-test-secret-key-that-is-long-enough-for-hmac-sha256-algorithm");
+        }
+
+        public void Dispose()
+        {
+            // Clean up - but don't remove since tests run in parallel
+        }
+
         private AppDbContext CreateContext()
         {
             var options = new DbContextOptionsBuilder<AppDbContext>()

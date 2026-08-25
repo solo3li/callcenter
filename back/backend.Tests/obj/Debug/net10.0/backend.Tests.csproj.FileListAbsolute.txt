@@ -533,3 +533,4 @@ C:\Users\solo\Desktop\testviop\back\backend.Tests\obj\Debug\net10.0\refint\backe
 C:\Users\solo\Desktop\testviop\back\backend.Tests\obj\Debug\net10.0\backend.Tests.pdb
 C:\Users\solo\Desktop\testviop\back\backend.Tests\obj\Debug\net10.0\backend.Tests.genruntimeconfig.cache
 C:\Users\solo\Desktop\testviop\back\backend.Tests\obj\Debug\net10.0\ref\backend.Tests.dll
+C:\Users\solo\Desktop\testviop\back\backend.Tests\bin\Debug\net10.0\CoverletSourceRootsMapping_backend.Tests

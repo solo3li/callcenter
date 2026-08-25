@@ -20,7 +20,9 @@ namespace backend.Services
         public AuthService(AppDbContext db)
         {
             _db = db;
-            _jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET") ?? "super-secret-key-change-in-production";
+            _jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET");
+            if (string.IsNullOrEmpty(_jwtSecret))
+                throw new InvalidOperationException("JWT_SECRET environment variable is required");
         }
 
         public async Task<User> RegisterAsync(RegisterRequest request)

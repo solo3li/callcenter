@@ -1,12 +1,13 @@
 {
   "version": 2,
-  "dgSpecHash": "KPQb+r4c/lY=",
+  "dgSpecHash": "HSd87d3HECY=",
   "success": true,
   "projectFilePath": "C:\\Users\\solo\\Desktop\\testviop\\back\\backend.Tests\\backend.Tests.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\solo\\.nuget\\packages\\bcrypt.net-next\\4.0.3\\bcrypt.net-next.4.0.3.nupkg.sha512",
     "C:\\Users\\solo\\.nuget\\packages\\castle.core\\5.1.1\\castle.core.5.1.1.nupkg.sha512",
     "C:\\Users\\solo\\.nuget\\packages\\communitytoolkit.highperformance\\8.3.0\\communitytoolkit.highperformance.8.3.0.nupkg.sha512",
+    "C:\\Users\\solo\\.nuget\\packages\\coverlet.collector\\6.0.2\\coverlet.collector.6.0.2.nupkg.sha512",
     "C:\\Users\\solo\\.nuget\\packages\\dapper\\2.0.123\\dapper.2.0.123.nupkg.sha512",
     "C:\\Users\\solo\\.nuget\\packages\\fluentvalidation\\11.5.1\\fluentvalidation.11.5.1.nupkg.sha512",
     "C:\\Users\\solo\\.nuget\\packages\\fluentvalidation.aspnetcore\\11.3.0\\fluentvalidation.aspnetcore.11.3.0.nupkg.sha512",
