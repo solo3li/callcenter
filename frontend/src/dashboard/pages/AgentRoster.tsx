@@ -2,13 +2,14 @@ import { useState } from "react";
 import AgentCard from "../components/AgentCard";
 import Badge from "../components/Badge";
 import { AGENTS, type Agent } from "../data";
-import { statsApi } from "../../api/endpoints";
-import type { AgentStatsDto } from "../../api/endpoints";
+import { statsApi, personasApi } from "../../api/endpoints";
+import type { AgentStatsDto, PersonaListItem } from "../../api/endpoints";
 import { useApi } from "../../hooks/useApi";
 
 const API_ENABLED = !!import.meta.env.VITE_API_URL;
 
-const AI_AGENTS = AGENTS.filter((a) => a.type === "ai");
+const MOCK_HUMANS = AGENTS.filter((a) => a.type === "human");
+const MOCK_AI = AGENTS.filter((a) => a.type === "ai");
 
 function mapAgentStats(a: AgentStatsDto, idx: number): Agent {
   const status =
@@ -39,21 +40,56 @@ function mapAgentStats(a: AgentStatsDto, idx: number): Agent {
   };
 }
 
+function mapPersona(p: PersonaListItem, idx: number): Agent {
+  const initials = p.name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  return {
+    id: p.id,
+    name: p.name,
+    type: "ai",
+    status: p.isActive ? "online" : "offline",
+    role: p.description?.slice(0, 60) || "AI voice persona",
+    languages: [],
+    initials: initials || `P${idx}`,
+    avatarUrl: null,
+    activeCalls: 0,
+    callsToday: 0,
+    avgHandleTime: 0,
+    capacity: p.isActive ? 100 : 0,
+  };
+}
+
 export default function AgentRoster() {
   const [tab, setTab] = useState<"ai" | "human">("ai");
 
-  const { data: apiAgents, error, loading } = useApi(
+  const { data: apiAgents, error: humansError, loading: humansLoading } = useApi(
     () => statsApi.agents(),
+    []
+  );
+
+  const { data: apiPersonas, error: aiError } = useApi(
+    () => (API_ENABLED ? personasApi.list() : Promise.resolve(null)),
     []
   );
 
   const humanAgents: Agent[] =
     API_ENABLED && apiAgents && apiAgents.length > 0
       ? apiAgents.map(mapAgentStats)
-      : AGENTS.filter((a) => a.type === "human");
+      : MOCK_HUMANS;
 
-  const agents = tab === "ai" ? AI_AGENTS : humanAgents;
+  const aiAgents: Agent[] =
+    API_ENABLED && apiPersonas && apiPersonas.length > 0
+      ? apiPersonas.map(mapPersona)
+      : MOCK_AI;
+
+  const agents = tab === "ai" ? aiAgents : humanAgents;
   const onlineHumans = humanAgents.filter((a) => a.status !== "offline").length;
+  const activeAi = aiAgents.filter((a) => a.status !== "offline").length;
 
   return (
     <div className="space-y-8">
@@ -61,7 +97,7 @@ export default function AgentRoster() {
         <p className="kicker mb-1">// agent roster</p>
         <h1 className="font-display text-3xl font-bold tracking-tight text-mist">
           {tab === "ai" ? "AI agents" : "Human agents"}
-          {API_ENABLED && tab === "human" && apiAgents && (
+          {API_ENABLED && (apiAgents || apiPersonas) && (
             <span className="ml-3 inline-flex items-center gap-1.5 rounded-full border border-mint/30 bg-mint/10 px-2.5 py-0.5 text-[10px] font-mono font-normal uppercase tracking-[0.12em] text-mint">
               <span className="h-1.5 w-1.5 rounded-full bg-mint animate-pulse" />
               Live API
@@ -70,7 +106,7 @@ export default function AgentRoster() {
         </h1>
         <p className="mt-1 text-sm text-dim">
           {tab === "ai"
-            ? `${AI_AGENTS.length} AI agents handling calls around the clock`
+            ? `${activeAi} of ${aiAgents.length} AI personas active`
             : `${onlineHumans} of ${humanAgents.length} humans online`}
         </p>
       </div>
@@ -82,7 +118,7 @@ export default function AgentRoster() {
             tab === "ai" ? "btn-mint" : "btn-ghost"
           }`}
         >
-          AI agents ({AI_AGENTS.length})
+          AI agents ({aiAgents.length})
         </button>
         <button
           onClick={() => setTab("human")}
@@ -94,13 +130,18 @@ export default function AgentRoster() {
         </button>
       </div>
 
-      {API_ENABLED && tab === "human" && error && (
+      {API_ENABLED && tab === "human" && humansError && (
         <p className="border border-coral/40 bg-coral/10 px-4 py-3 font-mono text-[11px] text-coral">
-          {error}
+          {humansError}
+        </p>
+      )}
+      {API_ENABLED && tab === "ai" && aiError && (
+        <p className="border border-coral/40 bg-coral/10 px-4 py-3 font-mono text-[11px] text-coral">
+          {aiError}
         </p>
       )}
 
-      {loading && API_ENABLED && tab === "human" ? (
+      {humansLoading && API_ENABLED && tab === "human" ? (
         <p className="font-mono text-[11px] text-dim">loading agents…</p>
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -117,9 +158,10 @@ export default function AgentRoster() {
         <div className="grid gap-6 sm:grid-cols-3">
           <div>
             <p className="font-display text-3xl font-bold tabular-nums text-mist">
-              <span style={{ color: "var(--color-mint)" }}>{AI_AGENTS.length}</span>
+              <span style={{ color: "var(--color-mint)" }}>{activeAi}</span>
+              <span className="text-dim">/{aiAgents.length}</span>
             </p>
-            <Badge label="AI agents active" tone="mint" />
+            <Badge label="AI personas active" tone="mint" />
           </div>
           <div>
             <p className="font-display text-3xl font-bold tabular-nums text-mist">

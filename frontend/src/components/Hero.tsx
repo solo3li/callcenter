@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { usePRM, useScramble, useJitter } from "../hooks";
 
 /* ---------------------------------- script ---------------------------------- */
@@ -334,6 +335,10 @@ export default function Hero() {
               Book a live demo
               <svg width="13" height="12" viewBox="0 0 13 12" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 6h10M7 1.5 11.5 6 7 10.5" /></svg>
             </a>
+            <Link to="/login" className="btn btn-mint">
+              Open live dashboard
+              <svg width="13" height="12" viewBox="0 0 13 12" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 6h10M7 1.5 11.5 6 7 10.5" /></svg>
+            </Link>
             <a href="#platform" className="btn btn-ghost">
               <svg width="11" height="12" viewBox="0 0 11 12" fill="currentColor"><path d="M0 0l11 6-11 6z" /></svg>
               See the hybrid loop

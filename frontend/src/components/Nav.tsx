@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 const LINKS = [
   { href: "#platform", label: "Platform" },
@@ -78,6 +79,12 @@ export default function Nav() {
               All lines open
             </span>
           </span>
+          <Link
+            to="/login"
+            className="btn btn-ghost !px-4 !py-2.5 hidden sm:inline-flex"
+          >
+            Sign in
+          </Link>
           <a href="#demo" className="btn btn-amber !px-4 !py-2.5">
             Book a demo
           </a>

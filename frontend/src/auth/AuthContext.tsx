@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import type { ReactNode } from 'react';
 import { authApi } from '../api/endpoints';
 import type { UserDto } from '../api/endpoints';
-import { bootstrapAuthToken, getStoredToken, storeToken } from '../api/auth';
+import { bootstrapAuthToken, getStoredToken, setAuthToken } from '../api/client';
 
 interface AuthState {
   user: UserDto | null;
@@ -19,7 +19,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const applyAuth = useCallback((token: string) => {
-    storeToken(token);
+    setAuthToken(token);
   }, []);
 
   useEffect(() => {
@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authApi
       .me()
       .then(setUser)
-      .catch(() => storeToken(null))
+      .catch(() => setAuthToken(null))
       .finally(() => setLoading(false));
   }, []);
 
@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(() => {
-    storeToken(null);
+    setAuthToken(null);
     setUser(null);
   }, []);
 

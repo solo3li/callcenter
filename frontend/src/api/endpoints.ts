@@ -145,6 +145,15 @@ export interface AgentStatsDto {
   lastActiveAt?: string | null;
 }
 
+export interface PersonaListItem {
+  id: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface QueueStats {
   activeCount: number;
   agentsOnline: number;
@@ -215,9 +224,10 @@ export const statsApi = {
 };
 
 export const callsApi = {
-  list: (params?: { status?: string; page?: number; limit?: number }) => {
+  list: (params?: { status?: string; from?: string; page?: number; limit?: number }) => {
     const qs = new URLSearchParams();
     if (params?.status) qs.set('status', params.status);
+    if (params?.from) qs.set('from', params.from);
     if (params?.page) qs.set('page', String(params.page));
     if (params?.limit) qs.set('limit', String(params.limit));
     return api.get<{ items: CallSession[]; totalCount: number; page: number; limit: number }>(
@@ -231,4 +241,8 @@ export const callsApi = {
 
 export const humanAgentsApi = {
   list: () => api.get<Agent[]>('/api/human-agents'),
+};
+
+export const personasApi = {
+  list: () => api.get<PersonaListItem[]>('/api/personas'),
 };

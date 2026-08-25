@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as signalR from '@microsoft/signalr';
-import { getStoredToken } from '../api/auth';
+import { getStoredToken } from '../api/client';
 import type { QueueUpdateEvent } from '../api/endpoints';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
