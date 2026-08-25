@@ -1,0 +1,9 @@
+Starting project at C:\Users\solo\Desktop\testviop\back\agent-app
+Starting Metro Bundler
+
+Waiting on http://localhost:8081
+
+An update for expo is available: 57.0.14 → ~57.0.16
+1 other package may need updating. Run npx expo install --check for details.
+Logs for your project will appear below.
+Web Bundled 11867ms index.js (637 modules)

@@ -23,6 +23,7 @@ using System.Linq;
 using System.IO;
 using System.Threading.Tasks;
 using Npgsql;
+using Pgvector.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -57,6 +58,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString, npgsqlOptions => {
+        npgsqlOptions.UseVector();
         npgsqlOptions.EnableRetryOnFailure(3);
     }));
 
@@ -335,6 +337,7 @@ static async Task RunSqlMigrationAsync(AppDbContext db, string connectionString)
     if (sql == null)
     {
         Console.WriteLine("[MIGRATION] SQL migration file not found. Using EnsureCreated fallback.");
+        await db.Database.ExecuteSqlRawAsync("CREATE EXTENSION IF NOT EXISTS vector;");
         db.Database.EnsureCreated();
         return;
     }

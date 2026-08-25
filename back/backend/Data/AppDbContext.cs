@@ -883,7 +883,20 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ChunkIndex).IsRequired();
             entity.Property(e => e.Content).IsRequired().HasColumnType("text");
-            entity.Property(e => e.Embedding).HasColumnType("vector(1536)");
+            var isNpgsql = Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL";
+            if (isNpgsql)
+            {
+                entity.Property(e => e.Embedding).HasColumnType("vector(1536)");
+            }
+            else
+            {
+                // Non-relational providers (e.g. InMemory tests) cannot map the pgvector type;
+                // serialize as "[1,2,3]" text instead.
+                entity.Property(e => e.Embedding).HasConversion(
+                    v => v == null ? null : "[" + string.Join(",", v.ToArray()) + "]",
+                    s => string.IsNullOrEmpty(s) ? null : new Pgvector.Vector(
+                        s.Trim('[', ']').Split(',').Select(float.Parse).ToArray()));
+            }
             entity.Property(e => e.MetadataJson).HasColumnType("jsonb");
             entity.Property(e => e.CreatedAt).HasColumnType("timestamptz");
 
