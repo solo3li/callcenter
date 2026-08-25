@@ -127,34 +127,17 @@ namespace backend.Endpoints
 
             app.MapPost("/api/auth/agent-login", async (AgentLoginRequest request, AppDbContext db) =>
             {
+                var rawKeyHash = Convert.ToHexString(
+                    SHA256.HashData(Encoding.UTF8.GetBytes(request.AccessKey))
+                ).ToLowerInvariant();
+
                 var accessKey = await db.HumanAgentAccessKeys
                     .Include(k => k.HumanAgent)
-                    .FirstOrDefaultAsync(k => request.AccessKey == k.KeyHash);
+                    .FirstOrDefaultAsync(k => k.KeyHash == rawKeyHash
+                        && k.Status == AccessKeyStatus.Active
+                        && (k.ExpiresAt == null || k.ExpiresAt >= DateTime.UtcNow));
 
                 if (accessKey == null)
-                {
-                    var keys = await db.HumanAgentAccessKeys.ToListAsync();
-                    HumanAgentAccessKey? matched = null;
-                    foreach (var k in keys)
-                    {
-                        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(request.AccessKey));
-                        var hashHex = Convert.ToHexString(hash).ToLowerInvariant();
-                        if (k.KeyHash == hashHex)
-                        {
-                            matched = k;
-                            break;
-                        }
-                    }
-                    if (matched == null)
-                        return Results.Unauthorized();
-                    await db.Entry(matched).Reference(k => k.HumanAgent).LoadAsync();
-                    accessKey = matched;
-                }
-
-                if (accessKey.Status != AccessKeyStatus.Active)
-                    return Results.Unauthorized();
-
-                if (accessKey.ExpiresAt.HasValue && accessKey.ExpiresAt.Value < DateTime.UtcNow)
                     return Results.Unauthorized();
 
                 accessKey.LastUsedAt = DateTime.UtcNow;
@@ -163,9 +146,10 @@ namespace backend.Endpoints
                 var agent = accessKey.HumanAgent;
                 var apiKey = Environment.GetEnvironmentVariable("LIVEKIT_API_KEY") ?? "devkey";
                 var apiSecret = Environment.GetEnvironmentVariable("LIVEKIT_API_SECRET") ?? "secret";
-                var livekitUrl = Environment.GetEnvironmentVariable("LIVEKIT_URL") ?? "ws://127.0.0.1:7880";
+                var livekitUrl = (Environment.GetEnvironmentVariable("LIVEKIT_URL") ?? "ws://127.0.0.1:7880")
+                    .Replace("http://", "ws://");
 
-                var identity = $"agent_{agent.Id.ToString("N")[..8]}";
+                var identity = $"agent_{agent.Id}";
                 var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
                 var payload = new Dictionary<string, object>

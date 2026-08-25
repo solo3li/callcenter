@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, ActivityIndicator } from 'react-native';
 import * as signalR from '@microsoft/signalr';
-import { Room, RoomEvent } from 'livekit-client';
-import { LiveKitRoom, useRoomContext, VideoTrack } from '@livekit/react-native';
+import { LiveKitRoom, useRoomContext } from '@livekit/react-native';
 
 const BACKEND_URL = 'http://127.0.0.1:5000';
 
@@ -12,7 +11,7 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [hubConnection, setHubConnection] = useState(null);
   const [agentName, setAgentName] = useState('');
-  const [agentStatus, setAgentStatus] = useState('Online');
+  const [agentStatus, setAgentStatus] = useState('Available');
 
   const [incomingRoom, setIncomingRoom] = useState(null);
   const [callSessionId, setCallSessionId] = useState(null);
@@ -21,6 +20,9 @@ export default function App() {
   const [activeToken, setActiveToken] = useState(null);
   const [livekitUrl, setLivekitUrl] = useState(null);
   const [handoffContext, setHandoffContext] = useState(null);
+  const [statusLoading, setStatusLoading] = useState(false);
+
+  const connectionRef = useRef(null);
 
   const handleLogin = async () => {
     try {
@@ -37,7 +39,7 @@ export default function App() {
         setIsLoggedIn(true);
         setupSignalR(data.agentId);
       } else {
-        alert('Login failed');
+        alert('Login failed. Check your access key.');
       }
     } catch (e) {
       alert('Network error. Make sure backend is running.');
@@ -59,10 +61,37 @@ export default function App() {
       setIncomingRoom(data.roomName);
     });
 
+    connection.onreconnecting(() => console.log('SignalR reconnecting...'));
+    connection.onreconnected((connectionId) => {
+      console.log('SignalR reconnected:', connectionId);
+      if (connectionId) {
+        connection.invoke('RegisterAgent', agentId).catch(err =>
+          console.error('Re-register failed:', err));
+      }
+    });
+
     connection.start().then(() => {
       connection.invoke('RegisterAgent', agentId);
     }).catch(err => console.error('SignalR error:', err));
+
     setHubConnection(connection);
+    connectionRef.current = connection;
+  };
+
+  const setAgentStatusRemote = async (status) => {
+    setStatusLoading(true);
+    try {
+      await fetch(`${BACKEND_URL}/api/human-agents/${agentId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      setAgentStatus(status);
+    } catch (e) {
+      console.error('Status update failed:', e);
+    } finally {
+      setStatusLoading(false);
+    }
   };
 
   const answerCall = async () => {
@@ -117,21 +146,54 @@ export default function App() {
     setHandoffId(null);
   };
 
-  const endCall = () => {
+  const endCall = async () => {
+    try {
+      if (transferId) {
+        await fetch(`${BACKEND_URL}/api/calls/${callSessionId}/transfers/${transferId}/complete`, {
+          method: 'POST'
+        });
+      } else if (callSessionId) {
+        await fetch(`${BACKEND_URL}/api/calls/${callSessionId}/end`, {
+          method: 'POST'
+        });
+      }
+    } catch (e) {
+      console.error('Failed to end call on backend:', e);
+    }
+
     setActiveToken(null);
     setIncomingRoom(null);
     setCallSessionId(null);
     setTransferId(null);
     setHandoffId(null);
     setHandoffContext(null);
-    setAgentStatus('Online');
+    setAgentStatus('Available');
+  };
+
+  const logout = async () => {
+    if (connectionRef.current) {
+      await connectionRef.current.stop();
+    }
+    setHubConnection(null);
+    setAgentId(null);
+    setAgentName('');
+    setIsLoggedIn(false);
+    setIncomingRoom(null);
+    setCallSessionId(null);
+    setTransferId(null);
+    setHandoffId(null);
+    setHandoffContext(null);
   };
 
   if (activeToken) {
     return (
       <SafeAreaView style={styles.container}>
         <LiveKitRoom serverUrl={livekitUrl} token={activeToken} connect={true} audio={true}>
-          <ActiveCallView onEndCall={endCall} roomName={incomingRoom} handoffContext={handoffContext} />
+          <ActiveCallView
+            onEndCall={endCall}
+            roomName={incomingRoom}
+            handoffContext={handoffContext}
+          />
         </LiveKitRoom>
       </SafeAreaView>
     );
@@ -142,7 +204,28 @@ export default function App() {
       <SafeAreaView style={styles.container}>
         <Text style={styles.title}>Agent Dashboard</Text>
         <Text>Status: {agentStatus} - {agentName}</Text>
-        
+
+        <View style={styles.statusRow}>
+          <TouchableOpacity
+            style={[styles.statusBtn, agentStatus === 'Available' && styles.statusActive]}
+            onPress={() => setAgentStatusRemote('Available')}
+            disabled={statusLoading}>
+            <Text style={styles.statusBtnText}>Available</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.statusBtn, styles.statusWarning, agentStatus === 'Break' && styles.statusActive]}
+            onPress={() => setAgentStatusRemote('Break')}
+            disabled={statusLoading}>
+            <Text style={styles.statusBtnText}>Break</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.statusBtn, styles.statusDanger, agentStatus === 'NotReady' && styles.statusActive]}
+            onPress={() => setAgentStatusRemote('NotReady')}
+            disabled={statusLoading}>
+            <Text style={styles.statusBtnText}>Not Ready</Text>
+          </TouchableOpacity>
+        </View>
+
         {incomingRoom ? (
           <View style={styles.callBox}>
             <Text style={styles.ringingText}>Incoming Call!</Text>
@@ -163,6 +246,10 @@ export default function App() {
             <Text style={{marginTop: 10}}>Waiting for calls...</Text>
           </View>
         )}
+
+        <TouchableOpacity style={[styles.btn, {backgroundColor: '#666', marginTop: 30}]} onPress={logout}>
+          <Text style={styles.btnText}>Logout</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
@@ -179,12 +266,23 @@ export default function App() {
 }
 
 function ActiveCallView({ onEndCall, roomName, handoffContext }) {
-  const room = useRoomContext();
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setElapsed(s => s + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = elapsed % 60;
 
   return (
     <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
       <Text style={styles.title}>Active Call</Text>
       <Text>Connected to: {roomName}</Text>
+      <Text style={{fontSize: 28, fontWeight: 'bold', marginVertical: 10, color: '#333'}}>
+        {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+      </Text>
       {handoffContext && (
         <View style={styles.contextBox}>
           <Text style={styles.contextTitle}>Handoff Context:</Text>
@@ -211,5 +309,11 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', marginTop: 10 },
   idleBox: { marginTop: 40, alignItems: 'center' },
   contextBox: { marginTop: 10, padding: 10, backgroundColor: '#f0f0f0', borderRadius: 5, width: '90%' },
-  contextTitle: { fontWeight: 'bold', marginBottom: 5 }
+  contextTitle: { fontWeight: 'bold', marginBottom: 5 },
+  statusRow: { flexDirection: 'row', marginVertical: 15, gap: 8 },
+  statusBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, backgroundColor: '#e0e0e0', minWidth: 80, alignItems: 'center' },
+  statusBtnText: { fontSize: 12, fontWeight: '600', color: '#555' },
+  statusActive: { backgroundColor: '#4CAF50', borderWidth: 2, borderColor: '#2E7D32' },
+  statusWarning: {},
+  statusDanger: {},
 });
