@@ -131,13 +131,12 @@ app.MapWebhookEndpoints();
 // ── Legacy backward-compat endpoints ────────────────────────────────────
 app.MapGet("/api/token", async (
     string? identity, string? room,
-    LiveKitService liveKit, CallSessionService callSession,
-    CallRecordingService recording, AppDbContext db) =>
+    LiveKitService liveKit, AppDbContext db) =>
 {
     identity ??= "web-user-" + Guid.NewGuid().ToString("N")[..8];
-    var roomName = room ?? callSession.GenerateRoomName();
+    var roomName = room ?? CallSessionService.GenerateRoomName();
 
-    var result = liveKit.GenerateToken(identity, roomName, true, true);
+    var token = liveKit.GenerateToken(identity, roomName, true, true);
 
     if (!identity.StartsWith("admin_") && !identity.StartsWith("agent_"))
     {
@@ -152,7 +151,7 @@ app.MapGet("/api/token", async (
             await db.SaveChangesAsync();
         }
     }
-    return Results.Json(new { token = result.Token, url = result.Url, roomName });
+    return Results.Json(new { token, url = "ws://127.0.0.1:7880", roomName });
 });
 
 app.MapHub<CallHub>("/hubs/call");
