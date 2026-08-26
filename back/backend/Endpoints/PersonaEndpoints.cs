@@ -117,6 +117,41 @@ public static class PersonaEndpoints
             return Results.Ok(new { defaultPersonaId = id });
         });
 
+        // Worker RAG tool: persona-linked knowledge retrieval. Same auth model
+        // as /published (service token or owning user).
+        group.MapGet("/{id:guid}/knowledge-context", async (Guid id, string query,
+            int? topK, AppDbContext db, KnowledgeBaseService kbService, HttpContext http) =>
+        {
+            if (!ServiceAuth.IsConfiguredOrValid(http) &&
+                !http.Items.ContainsKey("UserId"))
+                return Results.Unauthorized();
+
+            if (string.IsNullOrWhiteSpace(query))
+                return Results.BadRequest(new { error = "query is required" });
+
+            Guid? requesterId = http.Items.TryGetValue("UserId", out var v) ? (Guid?)v : null;
+            var persona = await db.Personas
+                .FirstOrDefaultAsync(p => p.Id == id && p.IsActive);
+
+            if (persona == null)
+                return Results.NotFound();
+
+            if (requesterId.HasValue && persona.UserId != requesterId.Value &&
+                !ServiceAuth.IsConfiguredOrValid(http))
+                return Results.Forbid();
+
+            var results = await kbService.SearchPersonaKnowledgeAsync(
+                id, query.Trim(), Math.Clamp(topK ?? 4, 1, 10));
+
+            return Results.Ok(results.Select(r => new
+            {
+                content = r.Content,
+                documentName = r.DocumentName,
+                chunkIndex = r.ChunkIndex,
+                similarity = r.Score
+            }));
+        });
+
         var actionGroup = group.MapGroup("/{personaId:guid}/actions");
 
         actionGroup.MapGet("/", async (Guid personaId, AppDbContext db, HttpContext http) =>

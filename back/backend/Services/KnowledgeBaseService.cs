@@ -237,9 +237,41 @@ namespace backend.Services
             public double? similarity { get; set; }
         }
 
-        public async Task<List<KnowledgeBaseListItem>> GetPersonaKnowledgeBasesAsync(Guid personaId)
+        /// <summary>
+        /// RAG retrieval across every KB linked to a persona (worker tool backend).
+        /// Falls back to ILike text matching per-KB when embeddings are absent;
+        /// any failure degrades to an empty result so calls never break.
+        /// </summary>
+        public async Task<List<SearchResult>> SearchPersonaKnowledgeAsync(
+            Guid personaId, string query, int topK = 4)
         {
-            var kbIds = await _db.PersonaKnowledgeBases
+            try
+            {
+                var kbIds = await _db.PersonaKnowledgeBases
+                    .Where(pk => pk.PersonaId == personaId)
+                    .Select(pk => pk.KnowledgeBaseId)
+                    .ToListAsync();
+
+                if (kbIds.Count == 0) return new List<SearchResult>();
+
+                var merged = new List<SearchResult>();
+                foreach (var kbId in kbIds)
+                    merged.AddRange(await SearchAsync(kbId, query, topK));
+
+                return merged
+                    .OrderBy(r => r.Score ?? float.MaxValue) // cosine distance: lower is better
+                    .Take(topK)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[KB] Persona knowledge search failed: {ex.Message}");
+                return new List<SearchResult>();
+            }
+        }
+
+        public async Task<List<KnowledgeBaseListItem>> GetPersonaKnowledgeBasesAsync(Guid personaId)
+        {            var kbIds = await _db.PersonaKnowledgeBases
                 .Where(pk => pk.PersonaId == personaId)
                 .Select(pk => pk.KnowledgeBaseId)
                 .ToListAsync();

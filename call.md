@@ -9,7 +9,7 @@
 1. [Project Overview](#1-project-overview)
 2. [Architecture](#2-architecture)
 3. [Database & Enums](#3-database--enums)
-4. [API Reference — All 158 Endpoints](#4-api-reference)
+4. [API Reference — All 159 Endpoints](#4-api-reference)
 5. [Business Logic & Scenarios](#5-business-logic--scenarios)
 6. [Dashboard Frontend](#6-dashboard-frontend)
 7. [Agent App (Expo / React Native)](#7-agent-app)
@@ -62,7 +62,7 @@ testviop/
     ├── sip-setup.py         idempotent trunk/dispatch-rule bootstrap
     ├── Caddyfile            :8080 router
     ├── backend/             ASP.NET API (+ legacy wwwroot pages)
-    │   ├── Endpoints/       22 endpoint groups (158 routes)
+    │   ├── Endpoints/       22 endpoint groups (159 routes)
     │   ├── Services/        business logic (incl. InboundRoutingService)
     │   ├── Data/            AppDbContext + DbPatchRunner (patch migrations)
     │   ├── Models/          Domain entities + Enums
@@ -274,10 +274,11 @@ GET `/` list · GET `/{recordingId}` · GET `/{recordingId}/download` → `{url}
 | DELETE `/{id}/access-keys/{keyId}` | revoke |
 | GET `/{id}/sessions[/current]` | SignalR presence rows |
 
-### 4.8 Personas — `/api/personas` (15)
+### 4.8 Personas — `/api/personas` (16)
 
 CRUD `/` + `/{id}` (PATCH `{name?,description?,isActive?}`, DELETE) ·
 **GET `/{id}/published`** — worker contract `{personaName, systemPrompt, configurationJson}` (latest IsPublished version; service-token or owner auth) ·
+**GET `/{id}/knowledge-context?query&topK`** — RAG retrieval across persona-linked KBs for the AI's `search_knowledge` tool ·
 **GET/PUT `/default`** — inbound-routing persona (`{personaId|null}`; PUT validates ownership) ·
 `/{pid}/actions` GET list / POST `/{actionDefId}` link / DELETE unlink ·
 `/{pid}/versions` GET / POST `{systemPrompt,configurationJson?}` / GET `/{versionId}` / POST `/{versionId}/publish` ·
@@ -303,7 +304,7 @@ GET `/?type` · GET `/system` (system defs seeded) · GET `/{id}` · POST (only 
 
 ### 4.13 Usage — `/api/usage` (5)
 
-GET `/?metricType&from&to&callSessionId&licenseId&partnerId` → `UsageRecordDto[]` · GET `/summary` → `UsageSummaryDto[]{metricType,totalQuantity,unit,count}` · GET `/metric/{type}` · GET `/call/{callSessionId}` · POST `/` record event (worker-side metering).
+GET `/?metricType&from&to&callSessionId&licenseId&partnerId` → `UsageRecordDto[]` · GET `/summary` → `UsageSummaryDto[]{metricType,totalQuantity,unit,count}` · GET `/metric/{type}` · GET `/call/{callSessionId}` · POST `/` record event — **two auth modes**: user JWT, or worker service-token + `callSessionId` (ownership derived from the session row). Metric types: `CallDuration`, `CallMinutes`, `TransferCount`, `RecordingMinutes`, `AgentSessionMinutes`.
 
 ### 4.14 API Keys — `/api/api-keys` (4)
 
@@ -396,7 +397,7 @@ Failures at step 2 return HTTP 400 and the AI stays on the call speaking the err
 
 ### 5.4 RAG Pipeline
 
-Upload doc (text) → split into ≤1000-char chunks → each chunk gets an embedding via OpenAI `text-embedding-3-small` (1536 dims stored as pgvector) → persona-linked KBs are searched during calls with `<=>` cosine distance, topK results injected into the AI prompt. Dashboard provides upload UI + a semantic-search tester. Without embeddings configured, search returns empty rather than erroring.
+Upload doc (text) → split into ≤1000-char chunks → each chunk gets an embedding via OpenAI `text-embedding-3-small` (1536 dims stored as pgvector). **Live calls retrieve via the AI's `search_knowledge(query)` tool** (v0): it hits `GET /api/personas/{id}/knowledge-context` which searches every persona-linked KB (`SearchPersonaKnowledgeAsync`, cosine `<=>`, top-4 merged across KBs) and returns formatted bullets to Gemini. Without embeddings configured, retrieval falls back to ILike text match; without linked KBs the tool reports no info. Dashboard provides upload UI + a semantic-search tester.
 
 ### 5.5 Versioning & Publish Semantics
 
@@ -404,7 +405,7 @@ Personas and Workflows are immutable-versioned: drafts append (`VersionNumber` i
 
 ### 5.6 Metering & Licensing
 
-Worker records usage events (per-call minutes, inference units…) idempotently (`IdempotencyKey`). Licenses define windows (`StartsAt/EndsAt/LimitsJson`); plans/subscriptions define purchasable tiers with trial support. Summary endpoints aggregate by metric type.
+The worker records one idempotent `call_minutes` row per AI-handled call: at customer disconnect it POSTs `/api/usage` with the session's `callSessionId`; the endpoint authenticates via service token and derives ownership from that session row. Licenses define windows (`StartsAt/EndsAt/LimitsJson`); plans/subscriptions define purchasable tiers with trial support. Summary endpoints aggregate by metric type.
 
 ### 5.7 Recording Flow
 
@@ -494,7 +495,7 @@ Web call specifics: `resolveLiveKitUrl()` rewrites internal hosts (`ws://livekit
 
 ### python-ai-worker
 
-Joins rooms as identity **`ai-agent`** using **Google Gemini Live** (`AGENT_MODEL=models/gemini-3.1-flash-live-preview`, voice `Aoede`, temperature 0.7). Registers as a **named agent** (`agent_name=voice-agent`) → only explicit dispatches create jobs (auto-dispatch disabled). Persona comes from dispatch metadata `{sessionId, personaId}` → `GET /api/personas/{id}/published` (env `PERSONA_ID` still works as fallback). Tools: `transfer_to_human(name?, reason?)` and `transfer_to_department(name, reason?)` POST the transfer shim with `X-Service-Token`; on `agent_*`/`dest_*` join after a requested transfer the worker posts the handoff summary and disconnects (backend removal is authoritative/idempotent). Env: `LIVEKIT_URL/KEY/SECRET`, `GEMINI_API_KEY`, `BACKEND_URL=http://backend:5000`, `BACKEND_SERVICE_TOKEN`, `AGENT_NAME`.
+Joins rooms as identity **`ai-agent`** using **Google Gemini Live** (`AGENT_MODEL=models/gemini-3.1-flash-live-preview`, voice `Aoede`, temperature 0.7). SDK **pinned** (`livekit-agents==1.6.10` + matching google plugin); identity is set via `WorkerOptions(request_fnc=…)` → `job_request.accept(identity="ai-agent")` — 1.x has no `identity=` kwarg on `connect()` and otherwise defaults to `agent-{jobId}`. Registers as a named agent (`agent_name=voice-agent`) → only explicit dispatches create jobs. Persona comes from dispatch metadata `{sessionId, personaId}` → `GET /api/personas/{id}/published` (env `PERSONA_ID` fallback). Tools: `transfer_to_human(name?, reason?)`, `transfer_to_department(name, reason?)`, and `search_knowledge(query)` (RAG over persona-linked KBs via `/knowledge-context`). On customer disconnect the worker posts call end + one idempotent `call_minutes` usage row (ownership derived backend-side from `callSessionId`). All machine calls carry `X-Service-Token`. Env: `LIVEKIT_URL/KEY/SECRET`, `GEMINI_API_KEY`, `BACKEND_URL=http://backend:5000`, `BACKEND_SERVICE_TOKEN`, `AGENT_NAME`.
 
 ### Legacy wwwroot
 

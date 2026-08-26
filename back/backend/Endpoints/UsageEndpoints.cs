@@ -1,6 +1,8 @@
 using System;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using backend.Data;
 using backend.Dtos;
 using backend.Services;
 
@@ -51,11 +53,31 @@ namespace backend.Endpoints
             });
 
             app.MapPost("/api/usage", async (HttpContext context, UsageService service,
-                Guid? partnerId, Guid? licenseId, Guid? callSessionId,
+                AppDbContext db, Guid? partnerId, Guid? licenseId, Guid? callSessionId,
                 string metricType, decimal quantity, string unit) =>
             {
-                if (!context.Items.TryGetValue("UserId", out var userIdObj) || userIdObj is not Guid userId)
+                Guid userId;
+
+                if (context.Items.TryGetValue("UserId", out var userIdObj) && userIdObj is Guid jwtUser)
+                {
+                    userId = jwtUser;
+                }
+                else if (backend.Middleware.ServiceAuth.IsConfiguredOrValid(context)
+                    && callSessionId.HasValue)
+                {
+                    // Worker path: derive ownership from the call session itself.
+                    var owner = await db.CallSessions
+                        .Where(c => c.Id == callSessionId.Value)
+                        .Select(c => (Guid?)c.UserId)
+                        .FirstOrDefaultAsync();
+                    if (owner == null)
+                        return Results.NotFound(new { error = "Call session not found" });
+                    userId = owner.Value;
+                }
+                else
+                {
                     return Results.Unauthorized();
+                }
 
                 try
                 {

@@ -7,6 +7,7 @@ import aiohttp
 from livekit.agents import (
     AutoSubscribe,
     JobContext,
+    JobRequest,
     WorkerOptions,
     cli,
     Agent,
@@ -176,8 +177,35 @@ async def entrypoint(ctx: JobContext):
                 logger.error(f"Failed to transfer to destination: {e}")
                 return "عذراً، حدث خطأ أثناء التحويل."
 
+    @llm.function_tool(description="ابحثي في قاعدة المعرفة للعثور على معلومات دقيقة عن المنتجات أو الأسعار أو السياسات قبل الإجابة. استخدميها كلما احتجت معلومة لست متأكدة منها.")
+    async def search_knowledge(query: str):
+        if not persona_id or not query:
+            return "لا توجد معلومات متاحة."
+        try:
+            from urllib.parse import quote
+            async with aiohttp.ClientSession() as http_session:
+                async with http_session.get(
+                    f"{backend_url}/api/personas/{persona_id}/knowledge-context",
+                    headers=_service_headers(),
+                    params={"query": query, "topK": "4"},
+                ) as resp:
+                    if resp.status != 200:
+                        return "لا توجد معلومات متاحة في قاعدة المعرفة."
+                    items = await resp.json()
+                    if not items:
+                        return "لا توجد معلومات متاحة في قاعدة المعرفة بهذا الشأن."
+                    lines = [
+                        f"- {item.get('content','').strip()}"
+                        + (f" (المصدر: {item['documentName']})" if item.get('documentName') else "")
+                        for item in items
+                    ]
+                    return "نتائج من قاعدة المعرفة:\n" + "\n".join(lines)
+        except Exception as e:
+            logger.warning(f"Knowledge search failed: {e}")
+            return "تعذر البحث في قاعدة المعرفة حالياً."
+
     agent = Agent(instructions=instructions)
-    session = AgentSession(llm=model, tools=[transfer_to_human, transfer_to_department])
+    session = AgentSession(llm=model, tools=[transfer_to_human, transfer_to_department, search_knowledge])
 
     @ctx.room.on("participant_connected")
     def on_participant_connected(participant):
@@ -233,14 +261,36 @@ async def entrypoint(ctx: JobContext):
                     )
                 except Exception as e:
                     logger.warning(f"Failed to end call: {e}")
+
+                # Metering: one idempotent call_minutes row per AI-handled call.
+                if session_id and connected_at:
+                    minutes = round((asyncio.get_event_loop().time() - connected_at) / 60, 2)
+                    if minutes > 0:
+                        try:
+                            await http_session.post(
+                                f"{backend_url}/api/usage",
+                                headers=_service_headers(),
+                                params={
+                                    "metricType": "call_minutes",
+                                    "quantity": str(minutes),
+                                    "unit": "minutes",
+                                    "callSessionId": session_id,
+                                },
+                            )
+                            logger.info(f"Recorded {minutes} call_minutes for session {session_id}")
+                        except Exception as e:
+                            logger.warning(f"Failed to record usage: {e}")
         asyncio.create_task(mark_ended())
 
-    try:
-        await session.start(agent, room=ctx.room)
-        await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY, identity=AI_IDENTITY)
-    except TypeError:
-        # Older SDKs without the identity kwarg.
-        await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+    connected_at = None
+    await session.start(agent, room=ctx.room)
+    # Pinned livekit-agents 1.6.10: connect() has no identity kwarg — the
+    # participant identity is fixed by job acceptance (see request_handler).
+    await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+    connected_at = asyncio.get_event_loop().time()
+
+    logger.info(f"Joined room {ctx.room.name} as {AI_IDENTITY} "
+                f"(session={session_id}, persona={persona_id})")
 
     async with aiohttp.ClientSession() as http_session:
         try:
@@ -259,8 +309,15 @@ async def entrypoint(ctx: JobContext):
     except Exception as exc:
         logger.warning("Initial greeting failed: %s", exc)
 
+async def request_handler(job_request: JobRequest):
+    """Pin the agent participant identity so backend webhook routing and the
+    cold-swap RemoveParticipant can rely on it."""
+    await job_request.accept(identity=AI_IDENTITY)
+
+
 if __name__ == "__main__":
     cli.run_app(WorkerOptions(
         entrypoint_fnc=entrypoint,
+        request_fnc=request_handler,
         agent_name=os.environ.get("AGENT_NAME", "voice-agent"),
     ))

@@ -52,6 +52,22 @@ namespace backend.Middleware
                 return;
             }
 
+            // Worker RAG tool: same service-token-or-owner model inside the endpoint.
+            if (path.StartsWith("/api/personas/") && path.EndsWith("/knowledge-context"))
+            {
+                await _next(context);
+                return;
+            }
+
+            // Worker metering: POST /api/usage authenticates inside the endpoint
+            // via service token + callSessionId ownership resolution.
+            if (path == "/api/usage" &&
+                string.Equals(context.Request.Method, "POST", StringComparison.OrdinalIgnoreCase))
+            {
+                await _next(context);
+                return;
+            }
+
             string? authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
             if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             {

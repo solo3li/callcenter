@@ -1,7 +1,4 @@
-livekit-agents>=0.11.0
+livekit-agents==1.6.10
+livekit-plugins-google==1.6.10
 google-genai
-livekit-plugins-google
 av
-
-
-
