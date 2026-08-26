@@ -1,0 +1,36 @@
+# ── .NET ──
+bin/
+obj/
+*.user
+*.suo
+testresults/
+[Oo]ut/
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+test_env/
+
+# ── Node ──
+node_modules/
+dist/
+.vite/
+
+# ── Logs ──
+*.log
+
+# ── Secrets / env (examples stay tracked) ──
+.env
+!.env.example
+
+# ── Expo ──
+.expo/
+
+# ── OS / IDE ──
+.vs/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
