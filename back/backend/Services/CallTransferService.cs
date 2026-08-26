@@ -65,6 +65,7 @@ namespace backend.Services
                 TargetType = TransferTargetType.HumanAgent,
                 TargetSnapshotJson = JsonSerializer.Serialize(new
                 {
+                    fromIdentity = InboundRoutingService.AiIdentity,
                     agentId = availableAgent.Id,
                     name = availableAgent.Name
                 }),
@@ -166,17 +167,18 @@ namespace backend.Services
 
             await _db.SaveChangesAsync();
 
-            // Cold-swap fallback for webhook-less setups: remove the AI shortly
-            // after accept. Webhook-driven swap remains authoritative and idempotent.
+            // Cold-swap fallback for webhook-less setups: remove the originating
+            // party shortly after accept. Webhook-driven swap remains authoritative.
             var roomName = session?.LivekitRoomName;
             if (!string.IsNullOrEmpty(roomName))
             {
+                var fromIdentity = InboundRoutingService.ExtractFromIdentity(transfer.TargetSnapshotJson);
                 _ = Task.Run(async () =>
                 {
                     await Task.Delay(TimeSpan.FromSeconds(3));
                     using var scope = _scopeFactory.CreateScope();
                     var lk = scope.ServiceProvider.GetRequiredService<LiveKitService>();
-                    await lk.RemoveParticipant(roomName, InboundRoutingService.AiIdentity);
+                    await lk.RemoveParticipant(roomName, fromIdentity);
                 });
             }
 
@@ -185,7 +187,7 @@ namespace backend.Services
                 transfer.CallSessionId,
                 transfer.FromParticipantId,
                 transfer.ToHumanAgentId,
-                transfer.ToHumanAgent.Name,
+                transfer.ToHumanAgent?.Name ?? "Human",
                 transfer.Status.ToString(),
                 transfer.Reason,
                 transfer.FailureReason,
@@ -242,6 +244,14 @@ namespace backend.Services
                 CallSessionId = transfer.CallSessionId,
                 FromParticipantId = fromParticipant?.Id,
                 ToHumanAgentId = nextAgent.Id,
+                Mode = TransferMode.Cold,
+                TargetType = TransferTargetType.HumanAgent,
+                TargetSnapshotJson = JsonSerializer.Serialize(new
+                {
+                    fromIdentity = InboundRoutingService.ExtractFromIdentity(transfer.TargetSnapshotJson),
+                    agentId = nextAgent.Id,
+                    name = nextAgent.Name
+                }),
                 Status = CallTransferStatus.Requested,
                 Reason = transfer.Reason,
                 RequestedAt = DateTime.UtcNow,
@@ -310,6 +320,7 @@ namespace backend.Services
         {
             var transfer = await _db.CallTransfers
                 .Include(t => t.ToHumanAgent)
+                .Include(t => t.Destination)
                 .FirstOrDefaultAsync(t => t.Id == transferId);
 
             if (transfer == null)
@@ -325,7 +336,8 @@ namespace backend.Services
             if (handoff != null)
                 handoff.Status = HandoffStatus.Accepted;
 
-            transfer.ToHumanAgent.Status = HumanAgentStatus.Available;
+            if (transfer.ToHumanAgent != null)
+                transfer.ToHumanAgent.Status = HumanAgentStatus.Available;
 
             await _db.SaveChangesAsync();
 
@@ -334,7 +346,7 @@ namespace backend.Services
                 transfer.CallSessionId,
                 transfer.FromParticipantId,
                 transfer.ToHumanAgentId,
-                transfer.ToHumanAgent.Name,
+                transfer.ToHumanAgent?.Name ?? transfer.Destination?.Name ?? "External",
                 transfer.Status.ToString(),
                 transfer.Reason,
                 transfer.FailureReason,
@@ -357,7 +369,9 @@ namespace backend.Services
                     t.CallSessionId,
                     t.FromParticipantId,
                     t.ToHumanAgentId,
-                    t.ToHumanAgent.Name,
+                    t.ToHumanAgent != null
+                        ? t.ToHumanAgent.Name
+                        : (t.Destination != null ? t.Destination.Name : "External"),
                     t.Status.ToString(),
                     t.Reason,
                     t.FailureReason,
@@ -382,7 +396,9 @@ namespace backend.Services
                     t.CallSessionId,
                     t.FromParticipantId,
                     t.ToHumanAgentId,
-                    t.ToHumanAgent.Name,
+                    t.ToHumanAgent != null
+                        ? t.ToHumanAgent.Name
+                        : (t.Destination != null ? t.Destination.Name : "External"),
                     t.Status.ToString(),
                     t.Reason,
                     t.FailureReason,
@@ -476,6 +492,7 @@ namespace backend.Services
                 TargetType = TransferTargetType.ExternalDestination,
                 TargetSnapshotJson = JsonSerializer.Serialize(new
                 {
+                    fromIdentity = InboundRoutingService.AiIdentity,
                     name = destination.Name,
                     callTo = destination.CallTo
                 }),
@@ -494,6 +511,163 @@ namespace backend.Services
             var roomName = session.LivekitRoomName;
             var identity = $"{InboundRoutingService.DestinationIdentityPrefix}{destination.Id}";
             _ = Task.Run(() => DialOutAndSwapAsync(transferId, roomId, roomName,
+                destination.CallTo, identity));
+
+            return new CallTransferDto(
+                transfer.Id,
+                transfer.CallSessionId,
+                transfer.FromParticipantId,
+                transfer.ToHumanAgentId,
+                destination.Name,
+                transfer.Status.ToString(),
+                transfer.Reason,
+                transfer.FailureReason,
+                transfer.RequestedAt,
+                transfer.AcceptedAt,
+                transfer.CompletedAt,
+                transfer.FailedAt,
+                transfer.CreatedAt,
+                transfer.UpdatedAt
+            );
+        }
+
+        // ── Agent-originated transfers (agent app) ────────────────────────
+
+        private async Task<(CallSession?, HumanAgent?)> ValidateRequestingAgentAsync(
+            Guid callSessionId, Guid requesterAgentId)
+        {
+            var session = await _db.CallSessions
+                .FirstOrDefaultAsync(c => c.Id == callSessionId);
+            if (session == null ||
+                (session.Status != CallSessionStatus.Transferred
+                    && session.Status != CallSessionStatus.Active))
+                return (null, null);
+
+            var requester = await _db.HumanAgents
+                .FirstOrDefaultAsync(a => a.Id == requesterAgentId && a.IsActive);
+            if (requester == null || requester.OwnerUserId != session.UserId)
+                return (null, null);
+
+            return (session, requester);
+        }
+
+        public async Task<CallTransferDto?> InitiateAgentHumanTransferAsync(
+            Guid callSessionId, Guid requesterAgentId, string? targetName, string? reason)
+        {
+            var (session, requester) = await ValidateRequestingAgentAsync(callSessionId, requesterAgentId);
+            if (session == null || requester == null) return null;
+
+            var availableAgent = await FindAvailableAgentAsync(
+                requester.OwnerUserId,
+                excludeAgentId: requesterAgentId,
+                preferredAgentName: string.IsNullOrWhiteSpace(targetName) ? null : targetName);
+            if (availableAgent == null)
+                throw new InvalidOperationException(
+                    !string.IsNullOrWhiteSpace(targetName)
+                        ? $"Agent '{targetName}' is not available"
+                        : "No human agents available");
+
+            var fromIdentity = $"{InboundRoutingService.AgentIdentityPrefix}{requesterAgentId}";
+            var transfer = new CallTransfer
+            {
+                Id = Guid.NewGuid(),
+                CallSessionId = callSessionId,
+                ToHumanAgentId = availableAgent.Id,
+                Mode = TransferMode.Cold,
+                TargetType = TransferTargetType.HumanAgent,
+                TargetSnapshotJson = JsonSerializer.Serialize(new
+                {
+                    fromIdentity,
+                    agentId = availableAgent.Id,
+                    name = availableAgent.Name
+                }),
+                Status = CallTransferStatus.Requested,
+                Reason = reason,
+                RequestedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _db.CallTransfers.Add(transfer);
+
+            var handoff = new CallHandoff
+            {
+                Id = Guid.NewGuid(),
+                CallSessionId = callSessionId,
+                CallTransferId = transfer.Id,
+                ToHumanAgentId = availableAgent.Id,
+                Status = HandoffStatus.Pending,
+                Reason = reason,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.CallHandoffs.Add(handoff);
+            await _db.SaveChangesAsync();
+
+            await _hub.Clients.Group($"agent_{availableAgent.Id}").SendAsync("IncomingTransfer", new
+            {
+                transferId = transfer.Id,
+                handoffId = handoff.Id,
+                callSessionId,
+                roomName = session.LivekitRoomName,
+                toHumanAgentId = availableAgent.Id,
+                reason
+            });
+
+            return new CallTransferDto(
+                transfer.Id,
+                transfer.CallSessionId,
+                transfer.FromParticipantId,
+                transfer.ToHumanAgentId,
+                availableAgent.Name,
+                transfer.Status.ToString(),
+                transfer.Reason,
+                transfer.FailureReason,
+                transfer.RequestedAt,
+                transfer.AcceptedAt,
+                transfer.CompletedAt,
+                transfer.FailedAt,
+                transfer.CreatedAt,
+                transfer.UpdatedAt
+            );
+        }
+
+        public async Task<CallTransferDto?> InitiateAgentDestinationTransferAsync(
+            Guid callSessionId, Guid requesterAgentId, string destinationName, string? reason)
+        {
+            var (session, requester) = await ValidateRequestingAgentAsync(callSessionId, requesterAgentId);
+            if (session == null || requester == null) return null;
+
+            var destination = await _db.SipDestinations
+                .FirstOrDefaultAsync(d => d.UserId == session.UserId
+                    && d.IsEnabled
+                    && d.Name.ToLower() == destinationName.ToLower());
+            if (destination == null)
+                throw new InvalidOperationException($"Destination '{destinationName}' not found");
+
+            var fromIdentity = $"{InboundRoutingService.AgentIdentityPrefix}{requesterAgentId}";
+            var transfer = new CallTransfer
+            {
+                Id = Guid.NewGuid(),
+                CallSessionId = callSessionId,
+                DestinationId = destination.Id,
+                Mode = TransferMode.Cold,
+                TargetType = TransferTargetType.ExternalDestination,
+                TargetSnapshotJson = JsonSerializer.Serialize(new
+                {
+                    fromIdentity,
+                    name = destination.Name,
+                    callTo = destination.CallTo
+                }),
+                Status = CallTransferStatus.Requested,
+                Reason = reason,
+                RequestedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _db.CallTransfers.Add(transfer);
+            await _db.SaveChangesAsync();
+
+            var identity = $"{InboundRoutingService.DestinationIdentityPrefix}{destination.Id}";
+            _ = Task.Run(() => DialOutAndSwapAsync(transfer.Id, session.Id, session.LivekitRoomName,
                 destination.CallTo, identity));
 
             return new CallTransferDto(

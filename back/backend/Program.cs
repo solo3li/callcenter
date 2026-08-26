@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Builder;
+﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -12,6 +12,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using backend.Data;
 using backend.Hubs;
+using backend.Dtos;
 using backend.Services;
 using backend.Endpoints;
 using backend.Middleware;
@@ -74,15 +75,15 @@ builder.Services.AddHangfireServer(options =>
 
 builder.Services.AddHttpContextAccessor();
 
-// ── Redis ─────────────────────────────────────────────────────────────────
+// â”€â”€ Redis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     ConnectionMultiplexer.Connect(Environment.GetEnvironmentVariable("REDIS_CONNECTION") ?? "redis:6379"));
 builder.Services.AddScoped<RedisPresenceService>();
 
-// ── FluentValidation ──────────────────────────────────────────────────────
+// â”€â”€ FluentValidation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 builder.Services.AddValidatorsFromAssemblyContaining<RegisterRequestValidator>();
 
-// ── Rate Limiting ─────────────────────────────────────────────────────────
+// â”€â”€ Rate Limiting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 builder.Services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("fixed", opt =>
@@ -100,7 +101,7 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = 429;
 });
 
-// ── Swagger ───────────────────────────────────────────────────────────────
+// â”€â”€ Swagger â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -151,7 +152,7 @@ builder.Services.AddSingleton<StorageService>();
 
 var app = builder.Build();
 
-// ── Database Initialization ─────────────────────────────────────────────
+// â”€â”€ Database Initialization â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -172,7 +173,7 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// ── Middleware Pipeline ──────────────────────────────────────────────────
+// â”€â”€ Middleware Pipeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.UseCors();
 app.UseRateLimiter();
 app.UseDefaultFiles();
@@ -201,7 +202,7 @@ RecurringJob.AddOrUpdate<TransferTimeoutProcessor>(
     new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc }
 );
 
-// ── Map All Endpoint Groups (136 endpoints) ─────────────────────────────
+// â”€â”€ Map All Endpoint Groups (136 endpoints) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.MapAuthEndpoints();
 app.MapApiKeyEndpoints();
 app.MapHumanAgentEndpoints();
@@ -225,7 +226,7 @@ app.MapStatsEndpoints();
 app.MapWebhookEndpoints();
 app.MapLiveKitWebhookEndpoints();
 
-// ── Legacy AI Worker Compat Shims ────────────────────────────────────────
+// â”€â”€ Legacy AI Worker Compat Shims â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.MapPost("/api/call/transfer", async (
     TransferShimDto req, HttpContext http, CallSessionService sessionService,
     CallTransferService transferService, AppDbContext db) =>
@@ -327,7 +328,102 @@ app.MapPost("/api/call/summary", async (
     return Results.Ok();
 });
 
-// ── Legacy backward-compat endpoints ────────────────────────────────────
+// â”€â”€ Agent-App Transfer Shims (exempt namespace, optional service token) â”€â”€
+app.MapGet("/api/call/transfer-options", async (
+    string roomName, Guid agentId, HttpContext http, AppDbContext db) =>
+{
+    if (!backend.Middleware.ServiceAuth.IsConfiguredOrValid(http))
+        return Results.Unauthorized();
+
+    var session = await db.CallSessions
+        .FirstOrDefaultAsync(c => c.LivekitRoomName == roomName);
+    if (session == null ||
+        (session.Status != CallSessionStatus.Transferred
+            && session.Status != CallSessionStatus.Active))
+        return Results.NotFound(new { error = "No active transferred call" });
+
+    var requester = await db.HumanAgents
+        .FirstOrDefaultAsync(a => a.Id == agentId && a.IsActive && a.OwnerUserId == session.UserId);
+    if (requester == null)
+        return Results.Forbid();
+
+    var agents = await db.HumanAgents
+        .Where(a => a.OwnerUserId == session.UserId && a.IsActive && a.Id != agentId)
+        .OrderBy(a => a.Name)
+        .Select(a => new { id = a.Id, name = a.Name, available = a.Status == HumanAgentStatus.Available })
+        .ToListAsync();
+
+    var destinations = await db.SipDestinations
+        .Where(d => d.UserId == session.UserId && d.IsEnabled)
+        .OrderBy(d => d.Name)
+        .Select(d => new { id = d.Id, name = d.Name })
+        .ToListAsync();
+
+    return Results.Ok(new { agents, destinations });
+});
+
+app.MapPost("/api/call/agent-transfer", async (
+    AgentTransferShimDto req, HttpContext http, AppDbContext db, CallTransferService transferService) =>
+{
+    if (!backend.Middleware.ServiceAuth.IsConfiguredOrValid(http))
+        return Results.Unauthorized();
+
+    var session = await db.CallSessions
+        .FirstOrDefaultAsync(c => c.LivekitRoomName == req.RoomName);
+    if (session == null)
+        return Results.NotFound(new { error = "Call session not found" });
+
+    try
+    {
+        var targetType = req.TargetType?.Trim().ToLowerInvariant();
+        CallTransferDto? result;
+
+        if (targetType == "destination")
+        {
+            if (string.IsNullOrWhiteSpace(req.TargetName))
+                return Results.BadRequest(new { error = "TargetName is required for destination transfers" });
+            result = await transferService.InitiateAgentDestinationTransferAsync(
+                session.Id, req.FromAgentId, req.TargetName!, req.Reason);
+        }
+        else
+        {
+            result = await transferService.InitiateAgentHumanTransferAsync(
+                session.Id, req.FromAgentId, req.TargetName, req.Reason);
+        }
+
+        return result == null
+            ? Results.BadRequest(new { error = "Requesting agent is not on this call" })
+            : Results.Ok(new { transferId = result.Id, targetName = result.ToHumanAgentName, status = result.Status });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/call/transfer-decision", async (
+    TransferDecisionShimDto req, HttpContext http, CallTransferService transferService) =>
+{
+    if (!backend.Middleware.ServiceAuth.IsConfiguredOrValid(http))
+        return Results.Unauthorized();
+
+    try
+    {
+        object? result = req.Decision == "accept"
+            ? await transferService.AcceptTransferAsync(req.TransferId, req.HumanAgentId)
+            : await transferService.RejectTransferAsync(req.TransferId, req.HumanAgentId);
+
+        return result == null
+            ? Results.NotFound(new { error = "Transfer not found for this agent" })
+            : Results.Ok(new { status = "ok" });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+// â”€â”€ Legacy backward-compat endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.MapGet("/api/token", async (
     string? identity, string? room,
     LiveKitService liveKit, AppDbContext db) =>
@@ -357,7 +453,7 @@ app.MapHub<CallHub>("/hubs/call");
 
 app.Run("http://0.0.0.0:5000");
 
-// ── Hangfire Queue Broadcaster ──────────────────────────────────────────
+// â”€â”€ Hangfire Queue Broadcaster â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 public class QueueBroadcaster
 {
     private readonly IHubContext<CallHub> _hub;
@@ -404,9 +500,23 @@ public class TransferShimDto
     public string? TargetName { get; set; }
     public string? Reason { get; set; }
 }
+public class AgentTransferShimDto
+{
+    public required string RoomName { get; set; }
+    public required Guid FromAgentId { get; set; }
+    public string? TargetType { get; set; }
+    public string? TargetName { get; set; }
+    public string? Reason { get; set; }
+}
+public class TransferDecisionShimDto
+{
+    public required Guid TransferId { get; set; }
+    public required Guid HumanAgentId { get; set; }
+    public string Decision { get; set; } = "accept";
+}
 public class SummaryShimDto { public required string RoomName { get; set; } public required string Summary { get; set; } }
 
-// ── Transfer Timeout Processor ──────────────────────────────────────────
+// â”€â”€ Transfer Timeout Processor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 public class TransferTimeoutProcessor
 {
     private readonly AppDbContext _db;
@@ -429,7 +539,7 @@ public class TransferTimeoutProcessor
                 .FirstOrDefaultAsync();
 
             transfer.Status = CallTransferStatus.Failed;
-            transfer.FailureReason = "Transfer timed out — agent did not respond";
+            transfer.FailureReason = "Transfer timed out â€” agent did not respond";
             transfer.FailedAt = DateTime.UtcNow;
             transfer.UpdatedAt = DateTime.UtcNow;
 
@@ -456,6 +566,15 @@ public class TransferTimeoutProcessor
                     Id = Guid.NewGuid(),
                     CallSessionId = transfer.CallSessionId,
                     ToHumanAgentId = availableAgent.Id,
+                    Mode = transfer.Mode,
+                    TargetType = transfer.TargetType,
+                    TargetSnapshotJson = System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        fromIdentity = backend.Services.InboundRoutingService.ExtractFromIdentity(
+                            transfer.TargetSnapshotJson),
+                        agentId = availableAgent.Id,
+                        name = availableAgent.Name
+                    }),
                     Status = CallTransferStatus.Requested,
                     Reason = transfer.Reason,
                     RequestedAt = DateTime.UtcNow,
@@ -491,3 +610,5 @@ public class TransferTimeoutProcessor
         }
     }
 }
+
+

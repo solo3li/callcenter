@@ -116,7 +116,9 @@ namespace backend.Services
                     t.CallSessionId,
                     t.FromParticipantId,
                     t.ToHumanAgentId,
-                    t.ToHumanAgent.Name,
+                    t.ToHumanAgent != null
+                        ? t.ToHumanAgent.Name
+                        : (t.Destination != null ? t.Destination.Name : "External"),
                     t.Status.ToString(),
                     t.Reason,
                     t.FailureReason,

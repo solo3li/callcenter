@@ -37,6 +37,22 @@ namespace backend.Endpoints
                 var userId = (Guid)http.Items["UserId"]!;
                 try
                 {
+                    var targetType = request.TargetType?.Trim().ToLowerInvariant();
+
+                    if (targetType == "destination")
+                    {
+                        if (string.IsNullOrWhiteSpace(request.TargetName))
+                            return Results.BadRequest("TargetName is required for destination transfers");
+
+                        var destResult = await service.InitiateDestinationTransferAsync(
+                            callSessionId, userId, request.TargetName!, request.Reason);
+                        return destResult is not null
+                            ? Results.Created(
+                                $"/api/calls/{callSessionId}/transfers/{destResult.Id}",
+                                new { transfer = destResult })
+                            : Results.NotFound();
+                    }
+
                     var result = await service.InitiateTransferAsync(callSessionId, userId, request.Reason);
                     return result is not null
                         ? Results.Created($"/api/calls/{callSessionId}/transfers/{result.Transfer.Id}", result)

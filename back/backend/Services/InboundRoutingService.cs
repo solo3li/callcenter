@@ -255,11 +255,12 @@ public class InboundRoutingService
         session.Status = CallSessionStatus.Transferred;
         await _db.SaveChangesAsync();
 
-        await CloseLegByIdentityAsync(session.Id, AiIdentity, "swapped_out");
-        await _liveKit.RemoveParticipant(session.LivekitRoomName, AiIdentity);
+        var fromIdentity = ExtractFromIdentity(transfer.TargetSnapshotJson);
+        await CloseLegByIdentityAsync(session.Id, fromIdentity, "swapped_out");
+        await _liveKit.RemoveParticipant(session.LivekitRoomName, fromIdentity);
 
-        _logger.LogInformation("Cold swap completed for session {Session} -> {Identity} ({Kind})",
-            session.Id, identity, kind);
+        _logger.LogInformation("Cold swap completed for session {Session} -> {Identity} ({Kind}), removed {From}",
+            session.Id, identity, kind, fromIdentity);
     }
 
     private async Task MarkAiAnsweredAsync(string roomName)
@@ -387,5 +388,28 @@ public class InboundRoutingService
         var guidPart = roomName[RoomOwnerPrefix.Length..];
         if (guidPart.Length < 36) return null;
         return Guid.TryParse(guidPart[..36], out var g) ? g : (Guid?)null;
+    }
+
+    /// <summary>
+    /// The participant that gets removed when this transfer completes.
+    /// Defaults to the AI worker for legacy/AI-originated transfers; agent- or
+    /// destination-originated transfers carry their outgoing party explicitly.
+    /// </summary>
+    public static string ExtractFromIdentity(string? targetSnapshotJson)
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(targetSnapshotJson))
+            {
+                using var doc = JsonDocument.Parse(targetSnapshotJson);
+                if (doc.RootElement.TryGetProperty("fromIdentity", out var el))
+                    return el.GetString() ?? AiIdentity;
+            }
+        }
+        catch
+        {
+            // Malformed snapshot: fall back to AI removal.
+        }
+        return AiIdentity;
     }
 }

@@ -18,7 +18,9 @@ namespace backend.Dtos
     );
 
     public sealed record InitiateTransferRequest(
-        string? Reason = null
+        string? Reason = null,
+        string? TargetType = null,
+        string? TargetName = null
     );
 
     public sealed record TransferResponse(

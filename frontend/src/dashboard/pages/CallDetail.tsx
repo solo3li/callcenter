@@ -2,9 +2,9 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Badge from "../components/Badge";
 import { CALLS, type Call } from "../data";
-import { callsApi, recordingsApi, transfersApi } from "../../api/endpoints";
-import type { CallDetail as ApiCallDetail } from "../../api/endpoints";
+import { callsApi, recordingsApi, transfersApi, sipDestinationsApi } from "../../api/endpoints";
 import { useApi } from "../../hooks/useApi";
+import type { CallDetail as ApiCallDetail } from "../../api/endpoints";
 
 const API_ENABLED = !!import.meta.env.VITE_API_URL;
 
@@ -142,8 +142,14 @@ function ApiDetailView({ call, onBack }: { call: ApiCallDetail; onBack: () => vo
   const [busy, setBusy] = useState(false);
   const [transferReason, setTransferReason] = useState("");
   const [transferMsg, setTransferMsg] = useState<string | null>(null);
+  const [destName, setDestName] = useState("");
 
   const isActive = ["Queued", "Ringing", "Active", "Transferred"].includes(call.status);
+
+  const { data: destinations } = useApi(
+    () => (isActive ? sipDestinationsApi.list() : Promise.resolve([])),
+    [isActive],
+  );
 
   const forceEnd = async () => {
     setBusy(true);
@@ -165,6 +171,21 @@ function ApiDetailView({ call, onBack }: { call: ApiCallDetail; onBack: () => vo
       await transfersApi.initiate(call.id, transferReason);
       setTransferMsg("Transfer requested — routing to next available agent. Refresh to see it in the list below.");
       setTransferReason("");
+    } catch (e) {
+      setTransferMsg(e instanceof Error ? e.message : "Transfer failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const initiateDestinationTransfer = async () => {
+    if (!destName) return;
+    setBusy(true);
+    setTransferMsg(null);
+    try {
+      await transfersApi.initiateDestination(call.id, destName, transferReason);
+      setTransferMsg(`Dialing "${destName}" — the external PBX will ring its queue. AI drops once answered.`);
+      setDestName("");
     } catch (e) {
       setTransferMsg(e instanceof Error ? e.message : "Transfer failed");
     } finally {
@@ -234,6 +255,27 @@ function ApiDetailView({ call, onBack }: { call: ApiCallDetail; onBack: () => vo
               {busy ? "routing…" : "→ transfer to next agent"}
             </button>
           </div>
+          {(destinations?.length ?? 0) > 0 && (
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                value={destName}
+                onChange={(e) => setDestName(e.target.value)}
+                className="min-w-[220px] border border-line bg-deep px-3 py-2 font-mono text-xs text-mist focus:border-mint focus:outline-none"
+              >
+                <option value="">— external destination… —</option>
+                {(destinations ?? []).map((d) => (
+                  <option key={d.id} value={d.name}>{d.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={initiateDestinationTransfer}
+                disabled={busy || !destName}
+                className="btn btn-amber !px-4 !py-2 !text-[10px] disabled:opacity-40"
+              >
+                {busy ? "dialing…" : `⇒ transfer to ${destName || "destination"}`}
+              </button>
+            </div>
+          )}
           {(actionMsg || transferMsg) && (
             <p className="font-mono text-[10px] leading-relaxed text-dim">
               {actionMsg ?? transferMsg}

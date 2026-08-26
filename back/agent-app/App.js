@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, ScrollView, Vibration, Platform } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, ScrollView, Vibration, Platform, Modal } from 'react-native';
 import * as signalR from '@microsoft/signalr';
 
 // LiveKit's react-native SDK uses requireNativeComponent (native-only) — loading it
@@ -45,6 +45,9 @@ export default function App() {
   const [lastCallInfo, setLastCallInfo] = useState(null);
   const [muted, setMuted] = useState(false);
   const [pendingTransfers, setPendingTransfers] = useState([]);
+  const [transferSheetVisible, setTransferSheetVisible] = useState(false);
+  const [transferOptions, setTransferOptions] = useState(null);
+  const [transferring, setTransferring] = useState(false);
 
   const connectionRef = useRef(null);
   const ringIntervalRef = useRef(null);
@@ -181,10 +184,10 @@ export default function App() {
   const answerCall = async () => {
     clearRinging();
     try {
-      await fetch(`${BACKEND_URL}/api/calls/${callSessionId}/transfers/${transferId}/accept`, {
+      await fetch(`${BACKEND_URL}/api/call/transfer-decision`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ humanAgentId: agentId })
+        body: JSON.stringify({ transferId, humanAgentId: agentId, decision: 'accept' })
       });
 
       try {
@@ -218,10 +221,10 @@ export default function App() {
   const rejectCall = async () => {
     clearRinging();
     try {
-      await fetch(`${BACKEND_URL}/api/calls/${callSessionId}/transfers/${transferId}/reject`, {
+      await fetch(`${BACKEND_URL}/api/call/transfer-decision`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ humanAgentId: agentId })
+        body: JSON.stringify({ transferId, humanAgentId: agentId, decision: 'reject' })
       });
     } catch (e) {
       console.error(e);
@@ -235,6 +238,48 @@ export default function App() {
     setCallSessionId(null);
     setTransferId(null);
     setHandoffId(null);
+  };
+
+  const openTransferSheet = async () => {
+    setTransferSheetVisible(true);
+    setTransferOptions(null);
+    try {
+      const resp = await fetch(
+        `${BACKEND_URL}/api/call/transfer-options?roomName=${encodeURIComponent(incomingRoom || '')}&agentId=${agentId}`
+      );
+      if (resp.ok) setTransferOptions(await resp.json());
+    } catch (e) {
+      console.error('Failed to load transfer options:', e);
+    }
+  };
+
+  const submitAgentTransfer = async (targetType, targetName) => {
+    if (!targetName || transferring) return;
+    setTransferring(true);
+    try {
+      const resp = await fetch(`${BACKEND_URL}/api/call/agent-transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomName: incomingRoom,
+          fromAgentId: agentId,
+          targetType,
+          targetName
+        })
+      });
+      const body = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        alert(body.error || 'Transfer failed');
+      } else {
+        setTransferSheetVisible(false);
+        alert(`Transferring to ${body.targetName || targetName}…`);
+      }
+    } catch (e) {
+      console.error('Agent transfer failed:', e);
+      alert('Transfer failed');
+    } finally {
+      setTransferring(false);
+    }
   };
 
   const endCall = async () => {
@@ -343,6 +388,66 @@ export default function App() {
           onToggleMute={() => setMuted(m => !m)}
           onEndCall={endCall}
         />
+        <TouchableOpacity style={styles.transferBtn} onPress={openTransferSheet}>
+          <Text style={styles.transferBtnText}>⇄ Transfer call…</Text>
+        </TouchableOpacity>
+
+        <Modal
+          visible={transferSheetVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setTransferSheetVisible(false)}
+        >
+          <View style={styles.sheetBackdrop}>
+            <View style={styles.sheetCard}>
+              <Text style={styles.sheetTitle}>Transfer this call</Text>
+              {!transferOptions ? (
+                <Text style={styles.sheetHint}>loading options…</Text>
+              ) : (
+                <>
+                  <ScrollView style={{ maxHeight: 180 }}>
+                    {transferOptions.agents?.length > 0 && (
+                      <>
+                        <Text style={styles.sectionLabel}>Colleagues</Text>
+                        {transferOptions.agents.map(a => (
+                          <TouchableOpacity
+                            key={`a-${a.id}`}
+                            style={[styles.listItem, !a.available && styles.listItemDisabled]}
+                            disabled={!a.available || transferring}
+                            onPress={() => submitAgentTransfer('human', a.name)}
+                          >
+                            <Text style={styles.listText}>{a.available ? a.name : `${a.name} (busy)`}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </>
+                    )}
+                    {transferOptions.destinations?.length > 0 && (
+                      <>
+                        <Text style={styles.sectionLabel}>External destinations</Text>
+                        {transferOptions.destinations.map(d => (
+                          <TouchableOpacity
+                            key={`d-${d.id}`}
+                            style={styles.listItem}
+                            disabled={transferring}
+                            onPress={() => submitAgentTransfer('destination', d.name)}
+                          >
+                            <Text style={styles.listText}>⇒ {d.name}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </>
+                    )}
+                  </ScrollView>
+                  {(transferOptions.agents?.length ?? 0) === 0 && (transferOptions.destinations?.length ?? 0) === 0 && (
+                    <Text style={styles.sheetHint}>No transfer targets configured.</Text>
+                  )}
+                </>
+              )}
+              <TouchableOpacity style={styles.sheetClose} onPress={() => setTransferSheetVisible(false)}>
+                <Text style={styles.btnText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     );
   }
@@ -514,4 +619,40 @@ const styles = StyleSheet.create({
   historyStatus: { fontSize: 12, fontWeight: '500' },
   historyDate: { fontSize: 11, color: '#999', marginTop: 3 },
   emptyText: { textAlign: 'center', color: '#999', marginTop: 30, fontSize: 14 },
+  transferBtn: {
+    backgroundColor: '#2f6f4e',
+    paddingVertical: 10,
+    paddingHorizontal: 22,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  transferBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheetCard: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 18,
+    maxHeight: '70%',
+  },
+  sheetTitle: { fontSize: 17, fontWeight: '700', marginBottom: 10 },
+  sheetHint: { color: '#888', fontSize: 13, paddingVertical: 8 },
+  sectionLabel: {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    color: '#999',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  listItem: { paddingVertical: 11, borderBottomWidth: 1, borderColor: '#eee' },
+  listItemDisabled: { opacity: 0.45 },
+  listText: { fontSize: 15 },
+  sheetClose: {
+    backgroundColor: '#666',
+    alignItems: 'center',
+    paddingVertical: 11,
+    borderRadius: 8,
+    marginTop: 14,
+  },
 });

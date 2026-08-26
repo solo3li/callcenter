@@ -335,6 +335,12 @@ export const personasApi = {
 export const transfersApi = {
   initiate: (callSessionId: string, reason?: string) =>
     api.post<unknown>(`/api/calls/${callSessionId}/transfers`, { reason: reason || undefined }),
+  initiateDestination: (callSessionId: string, targetName: string, reason?: string) =>
+    api.post<unknown>(`/api/calls/${callSessionId}/transfers`, {
+      reason: reason || undefined,
+      targetType: "destination",
+      targetName,
+    }),
 };
 
 export interface WorkflowListItem {

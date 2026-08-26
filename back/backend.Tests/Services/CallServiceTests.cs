@@ -88,6 +88,66 @@ namespace backend.Tests.Services
         }
 
         [Fact]
+        public async Task DestinationTransfer_ResolvesDestinationName()
+        {
+            using var db = CreateContext();
+            var user = new User
+            {
+                Id = Guid.NewGuid(), Email = "dest@test.com", DisplayName = "Dest User",
+                PasswordHash = "hashed", Status = UserStatus.Active,
+                CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            };
+            db.Users.Add(user);
+
+            var session = new CallSession
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                LivekitRoomName = CallSessionService.GenerateRoomName(),
+                Status = CallSessionStatus.Active,
+                Direction = CallDirection.Inbound,
+                StartedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow
+            };
+            db.CallSessions.Add(session);
+
+            var destination = new SipDestination
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                Name = "Support",
+                CallTo = "support-queue",
+                IsEnabled = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            db.SipDestinations.Add(destination);
+
+            var transfer = new CallTransfer
+            {
+                Id = Guid.NewGuid(),
+                CallSessionId = session.Id,
+                DestinationId = destination.Id,
+                Mode = TransferMode.Cold,
+                TargetType = TransferTargetType.ExternalDestination,
+                Status = CallTransferStatus.Requested,
+                RequestedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            db.CallTransfers.Add(transfer);
+            await db.SaveChangesAsync();
+
+            var mockHub = CreateMockHub();
+            var service = BuildTransferService(db, mockHub);
+
+            var dto = await service.GetByIdAsync(session.Id, transfer.Id);
+
+            Assert.NotNull(dto);
+            Assert.Equal("Support", dto!.ToHumanAgentName);
+        }
+
+        [Fact]
         public async Task FullTransferFlow_Success()
         {
             using var db = CreateContext();
