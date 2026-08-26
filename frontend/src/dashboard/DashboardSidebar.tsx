@@ -1,33 +1,34 @@
-import { NavLink, useNavigate } from "react-router-dom";
+﻿import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
 const SECTIONS = [
   {
     label: "operations",
     links: [
-      { to: "/dashboard/live", label: "Live Wallboard", icon: "▣" },
-      { to: "/dashboard/queue", label: "Queue", icon: "◍" },
-      { to: "/dashboard/roster", label: "Agent Roster", icon: "▥" },
-      { to: "/dashboard/analytics", label: "Analytics", icon: "▦" },
-      { to: "/dashboard/history", label: "Call History", icon: "▤" },
+      { to: "/dashboard/live", label: "Live Wallboard", icon: "â–£" },
+      { to: "/dashboard/queue", label: "Queue", icon: "â—" },
+      { to: "/dashboard/roster", label: "Agent Roster", icon: "â–¥" },
+      { to: "/dashboard/analytics", label: "Analytics", icon: "â–¦" },
+      { to: "/dashboard/history", label: "Call History", icon: "â–¤" },
     ],
   },
   {
     label: "platform setup",
     links: [
-      { to: "/dashboard/configs", label: "Call Configs", icon: "◈" },
-      { to: "/dashboard/personas", label: "AI Personas", icon: "◉" },
-      { to: "/dashboard/workflows", label: "Workflows", icon: "◇" },
-      { to: "/dashboard/knowledge", label: "Knowledge Bases", icon: "❏" },
+      { to: "/dashboard/configs", label: "Call Configs", icon: "â—ˆ" },
+      { to: "/dashboard/personas", label: "AI Personas", icon: "â—‰" },
+      { to: "/dashboard/workflows", label: "Workflows", icon: "â—‡" },
+      { to: "/dashboard/knowledge", label: "Knowledge Bases", icon: "â" },
+      { to: "/dashboard/sip-destinations", label: "SIP Destinations", icon: "☎" },
     ],
   },
   {
     label: "business",
     links: [
-      { to: "/dashboard/usage", label: "Usage & Metering", icon: "▤" },
-      { to: "/dashboard/api-keys", label: "API Keys", icon: "⚿" },
-      { to: "/dashboard/agents-admin", label: "Human Agents", icon: "☺" },
-      { to: "/dashboard/business", label: "Licenses & Partners", icon: "▦" },
+      { to: "/dashboard/usage", label: "Usage & Metering", icon: "â–¤" },
+      { to: "/dashboard/api-keys", label: "API Keys", icon: "âš¿" },
+      { to: "/dashboard/agents-admin", label: "Human Agents", icon: "â˜º" },
+      { to: "/dashboard/business", label: "Licenses & Partners", icon: "â–¦" },
     ],
   },
 ];
@@ -111,3 +112,4 @@ export default function DashboardSidebar() {
     </aside>
   );
 }
+

@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Migrations\Patches\*.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="jose-jwt" Version="5.3.0" />
     <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0" />

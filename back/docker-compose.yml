@@ -1,19 +1,4 @@
-version: '3.8'
 services:
-  asterisk:
-    build: ./asterisk
-    ports:
-      - "5060:5060/udp"
-      - "5060:5060/tcp"
-      - "10000-10050:10000-10050/udp"
-    restart: always
-    volumes:
-      - ./asterisk/pjsip.conf:/etc/asterisk/pjsip.conf
-      - ./asterisk/extensions.conf:/etc/asterisk/extensions.conf
-      - ./asterisk/rtp.conf:/etc/asterisk/rtp.conf
-    depends_on:
-      - livekit-sip
-
   redis:
     image: redis:7-alpine
     restart: always
@@ -23,11 +8,10 @@ services:
     ports:
       - "7880:7880"
       - "7881:7881"
-      - "7882:7882/udp"
-    command: --dev --node-ip 127.0.0.1 --bind 0.0.0.0
-    environment:
-      - "LIVEKIT_KEYS=devkey: secret"
-      - LIVEKIT_REDIS=redis:6379
+      - "7882-7892:7882-7892/udp"
+    command: --config /etc/livekit/livekit.yaml
+    volumes:
+      - ./livekit.yaml:/etc/livekit/livekit.yaml
     restart: always
     depends_on:
       - redis
@@ -40,11 +24,15 @@ services:
       - LIVEKIT_API_KEY=devkey
       - LIVEKIT_API_SECRET=secret
       - SIP_PORT=5061
+    ports:
+      - "5061:5061/udp"
+      - "5061:5061/tcp"
     volumes:
       - ./livekit-sip.yaml:/sip/config.yaml
     restart: always
     depends_on:
       - livekit
+      - redis
 
   backend:
     build: ./backend
@@ -62,11 +50,13 @@ services:
       - MINIO_SECRET_KEY=adminpassword
       - MINIO_BUCKET=recordings
       - CORS_ORIGINS=http://localhost:5173,http://localhost:3000,http://localhost:8081
+      - BACKEND_SERVICE_TOKEN=${BACKEND_SERVICE_TOKEN:-}
     volumes:
       - recordings_data:/app/wwwroot/recordings
     restart: always
     depends_on:
       - db
+      - livekit
 
   python-ai-worker:
     build:
@@ -78,11 +68,36 @@ services:
       - LIVEKIT_API_SECRET=secret
       - GEMINI_API_KEY=YOUR_GEMINI_API_KEY
       - GOOGLE_API_KEY=YOUR_GEMINI_API_KEY
+      - AGENT_NAME=voice-agent
       - PERSONA_ID=
       - BACKEND_URL=http://backend:5000
+      - BACKEND_SERVICE_TOKEN=${BACKEND_SERVICE_TOKEN:-}
       - AGENT_VOICE=Aoede
       - AGENT_TEMPERATURE=0.7
     restart: always
+    depends_on:
+      - livekit
+      - backend
+
+  # One-shot bootstrap: creates the SIP inbound trunk, dispatch rule and
+  # outbound trunk against the running LiveKit. Run with:
+  #   PBX_IP=1.2.3.4 OWNER_USER_ID=<user-guid> \
+  #   docker compose --profile setup run --rm sip-setup
+  sip-setup:
+    build:
+      context: ./python-ai-worker
+      dockerfile: Dockerfile
+    profiles: ["setup"]
+    environment:
+      - LIVEKIT_URL=http://livekit:7880
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=secret
+      - PBX_IP=${PBX_IP:?set PBX_IP to your customer PBX address}
+      - SIP_DIDS=${SIP_DIDS:-}
+      - OWNER_USER_ID=${OWNER_USER_ID:?set OWNER_USER_ID to the owning users.id}
+    volumes:
+      - ./sip-setup.py:/setup/sip-setup.py
+    command: python /setup/sip-setup.py
     depends_on:
       - livekit
 
@@ -131,7 +146,6 @@ services:
     ports:
       - "9000:9000"
       - "9001:9001"
-    restart: always
     volumes:
       - miniodata:/data
 

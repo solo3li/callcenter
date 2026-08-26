@@ -136,6 +136,7 @@ builder.Services.AddScoped<CallConfigurationService>();
 builder.Services.AddScoped<CallSessionService>();
 builder.Services.AddScoped<CallTransferService>();
 builder.Services.AddScoped<CallHandoffService>();
+builder.Services.AddScoped<InboundRoutingService>();
 builder.Services.AddScoped<CallRecordingService>();
 builder.Services.AddScoped<LiveKitService>();
 builder.Services.AddScoped<UsageService>();
@@ -154,7 +155,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await RunSqlMigrationAsync(db, connectionString);
+    await backend.Data.DbPatchRunner.RunAsync(db);
 
     var onlineAgents = db.Agents.Where(a => a.IsOnline).ToList();
     foreach (var a in onlineAgents) { a.IsOnline = false; a.Status = "Offline"; }
@@ -205,6 +206,7 @@ app.MapAuthEndpoints();
 app.MapApiKeyEndpoints();
 app.MapHumanAgentEndpoints();
 app.MapPersonaEndpoints();
+app.MapSipDestinationEndpoints();
 app.MapActionEndpoints();
 app.MapCallConfigurationEndpoints();
 app.MapCallSessionEndpoints();
@@ -221,21 +223,49 @@ app.MapWorkflowEndpoints();
 app.MapKnowledgeBaseEndpoints();
 app.MapStatsEndpoints();
 app.MapWebhookEndpoints();
+app.MapLiveKitWebhookEndpoints();
 
 // ── Legacy AI Worker Compat Shims ────────────────────────────────────────
 app.MapPost("/api/call/transfer", async (
-    TransferShimDto req, CallSessionService sessionService,
+    TransferShimDto req, HttpContext http, CallSessionService sessionService,
     CallTransferService transferService, AppDbContext db) =>
 {
+    if (!backend.Middleware.ServiceAuth.IsConfiguredOrValid(http))
+        return Results.Unauthorized();
+
     var session = await db.CallSessions
         .FirstOrDefaultAsync(c => c.LivekitRoomName == req.RoomName);
     if (session == null)
         return Results.BadRequest(new { error = "Call session not found for room" });
     try
     {
+        var targetType = req.TargetType?.Trim().ToLowerInvariant();
+
+        if (targetType == "destination")
+        {
+            if (string.IsNullOrWhiteSpace(req.TargetName))
+                return Results.BadRequest(new { error = "TargetName is required for destination transfers" });
+
+            var destResult = await transferService.InitiateDestinationTransferAsync(
+                session.Id, session.UserId, req.TargetName!, req.Reason);
+            return destResult == null
+                ? Results.NotFound(new { error = "Call session not found" })
+                : Results.Ok(new { transferId = destResult.Id, status = destResult.Status });
+        }
+
+        // Human transfer (named agent when provided, otherwise best available).
+        Guid? preferredId = Guid.TryParse(req.AgentId, out var aid) ? aid : null;
         var result = await transferService.InitiateTransferAsync(
-            session.Id, session.UserId, null);
-        return Results.Ok(new { transferId = result!.Transfer.Id, agentName = result.Transfer.ToHumanAgentName });
+            session.Id, session.UserId, req.Reason,
+            preferredAgentId: preferredId,
+            preferredAgentName: req.TargetName);
+
+        return Results.Ok(new
+        {
+            transferId = result!.Transfer.Id,
+            agentName = result.Transfer.ToHumanAgentName,
+            status = result.Transfer.Status
+        });
     }
     catch (InvalidOperationException ex)
     {
@@ -244,13 +274,18 @@ app.MapPost("/api/call/transfer", async (
 });
 
 app.MapPost("/api/call/active", async (
-    TransferShimDto req, CallSessionService sessionService,
+    TransferShimDto req, HttpContext http, CallSessionService sessionService,
     LiveKitService liveKit, AppDbContext db) =>
 {
+    if (!backend.Middleware.ServiceAuth.IsConfiguredOrValid(http))
+        return Results.Unauthorized();
+
     var existing = await db.CallSessions
         .FirstOrDefaultAsync(c => c.LivekitRoomName == req.RoomName);
-    if (existing == null)
+    if (existing == null && !req.RoomName.StartsWith(InboundRoutingService.RoomOwnerPrefix))
     {
+        // Platform-managed SIP rooms are created by the webhook path; only
+        // legacy ad-hoc rooms are registered here.
         await sessionService.CreateAsync(
             Guid.NewGuid(), null, null,
             req.RoomName, "Inbound");
@@ -259,8 +294,11 @@ app.MapPost("/api/call/active", async (
 });
 
 app.MapPost("/api/call/end", async (
-    TransferShimDto req, CallSessionService sessionService, AppDbContext db) =>
+    TransferShimDto req, HttpContext http, CallSessionService sessionService, AppDbContext db) =>
 {
+    if (!backend.Middleware.ServiceAuth.IsConfiguredOrValid(http))
+        return Results.Unauthorized();
+
     var session = await db.CallSessions
         .FirstOrDefaultAsync(c => c.LivekitRoomName == req.RoomName);
     if (session != null)
@@ -271,8 +309,11 @@ app.MapPost("/api/call/end", async (
 });
 
 app.MapPost("/api/call/summary", async (
-    SummaryShimDto req, CallHandoffService handoffService, AppDbContext db) =>
+    SummaryShimDto req, HttpContext http, CallHandoffService handoffService, AppDbContext db) =>
 {
+    if (!backend.Middleware.ServiceAuth.IsConfiguredOrValid(http))
+        return Results.Unauthorized();
+
     var session = await db.CallSessions
         .FirstOrDefaultAsync(c => c.LivekitRoomName == req.RoomName);
     if (session == null) return Results.Ok();
@@ -316,50 +357,6 @@ app.MapHub<CallHub>("/hubs/call");
 
 app.Run("http://0.0.0.0:5000");
 
-// ── Migration Runner ────────────────────────────────────────────────────
-static async Task RunSqlMigrationAsync(AppDbContext db, string connectionString)
-{
-    var migrationSqlPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..",
-        "Migrations", "Sql", "001_initial_schema.sql");
-
-    var pathsToTry = new[]
-    {
-        migrationSqlPath,
-        Path.Combine(Directory.GetCurrentDirectory(), "Migrations", "Sql", "001_initial_schema.sql"),
-        "Migrations/Sql/001_initial_schema.sql"
-    };
-
-    string? sql = null;
-    foreach (var p in pathsToTry)
-    {
-        if (File.Exists(p)) { sql = await File.ReadAllTextAsync(p); break; }
-    }
-
-    if (sql == null)
-    {
-        Console.WriteLine("[MIGRATION] SQL migration file not found. Using EnsureCreated fallback.");
-        await db.Database.ExecuteSqlRawAsync("CREATE EXTENSION IF NOT EXISTS vector;");
-        db.Database.EnsureCreated();
-        return;
-    }
-
-    try
-    {
-        await db.Database.BeginTransactionAsync();
-        await db.Database.ExecuteSqlRawAsync(sql);
-        Console.WriteLine("[MIGRATION] Schema created successfully.");
-    }
-    catch (PostgresException ex) when (ex.SqlState is "42710" or "42P07")
-    {
-        Console.WriteLine($"[MIGRATION] Some objects already exist (idempotent run): {ex.Message}");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"[MIGRATION] SQL migration failed ({ex.Message}), falling back to EnsureCreated...");
-        db.Database.EnsureCreated();
-    }
-}
-
 // ── Hangfire Queue Broadcaster ──────────────────────────────────────────
 public class QueueBroadcaster
 {
@@ -399,7 +396,14 @@ public class QueueBroadcaster
     }
 }
 
-public class TransferShimDto { public required string RoomName { get; set; } public string? AgentId { get; set; } }
+public class TransferShimDto
+{
+    public required string RoomName { get; set; }
+    public string? AgentId { get; set; }
+    public string? TargetType { get; set; }
+    public string? TargetName { get; set; }
+    public string? Reason { get; set; }
+}
 public class SummaryShimDto { public required string RoomName { get; set; } public required string Summary { get; set; } }
 
 // ── Transfer Timeout Processor ──────────────────────────────────────────

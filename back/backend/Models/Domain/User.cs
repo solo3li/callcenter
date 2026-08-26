@@ -17,6 +17,8 @@ public class User
 
     public UserStatus Status { get; set; } = UserStatus.Active;
 
+    public Guid? DefaultPersonaId { get; set; }
+
     public bool IsPartner { get; set; } = false;
 
     public decimal StandardCredits { get; set; } = 0;
@@ -25,6 +27,7 @@ public class User
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    public Persona? DefaultPersona { get; set; }
     public Partner? Partner { get; set; }
 
     public ICollection<ApiKey> ApiKeys { get; set; } = new List<ApiKey>();

@@ -14,6 +14,8 @@ public class CallSession
     public Guid? ApiKeyId { get; set; }
     public string LivekitRoomName { get; set; } = string.Empty;
     public string? LivekitRoomSid { get; set; }
+    public string? DialedNumber { get; set; }
+    public Guid? OriginSipConnectionId { get; set; }
     public CallSessionStatus Status { get; set; } = CallSessionStatus.Queued;
     public CallDirection Direction { get; set; } = CallDirection.Inbound;
     public DateTime StartedAt { get; set; } = DateTime.UtcNow;
@@ -28,6 +30,9 @@ public class CallSession
     public PersonaVersion? PersonaVersion { get; set; }
     public WorkflowVersion? WorkflowVersion { get; set; }
     public ApiKey? ApiKey { get; set; }
+    public SipConnection? OriginSipConnection { get; set; }
+
+    public ICollection<CallLeg> Legs { get; set; } = new List<CallLeg>();
 
     public ICollection<CallParticipant> Participants { get; set; } = new List<CallParticipant>();
     public ICollection<CallTransfer> Transfers { get; set; } = new List<CallTransfer>();

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using backend.Data;
@@ -12,17 +13,27 @@ namespace backend.Services
     {
         private readonly AppDbContext _db;
         private readonly IHubContext<CallHub> _hub;
+        private readonly LiveKitService _liveKit;
+        private readonly IServiceScopeFactory _scopeFactory;
+        private readonly ILogger<CallTransferService> _logger;
 
-        public CallTransferService(AppDbContext db, IHubContext<CallHub> hub)
+        public CallTransferService(AppDbContext db, IHubContext<CallHub> hub,
+            LiveKitService liveKit, IServiceScopeFactory scopeFactory,
+            ILogger<CallTransferService> logger)
         {
             _db = db;
             _hub = hub;
+            _liveKit = liveKit;
+            _scopeFactory = scopeFactory;
+            _logger = logger;
         }
 
         public async Task<TransferResponse?> InitiateTransferAsync(
             Guid callSessionId,
             Guid userId,
-            string? reason)
+            string? reason,
+            Guid? preferredAgentId = null,
+            string? preferredAgentName = null)
         {
             var session = await _db.CallSessions
                 .FirstOrDefaultAsync(c => c.Id == callSessionId && c.UserId == userId);
@@ -34,9 +45,15 @@ namespace backend.Services
                 .FirstOrDefaultAsync(p => p.CallSessionId == callSessionId
                     && p.ParticipantType == ParticipantType.AiAgent);
 
-            var availableAgent = await FindAvailableAgentAsync(userId);
+            var availableAgent = await FindAvailableAgentAsync(userId,
+                excludeAgentId: null,
+                preferredAgentId: preferredAgentId,
+                preferredAgentName: preferredAgentName);
             if (availableAgent == null)
-                throw new InvalidOperationException("No human agents available");
+                throw new InvalidOperationException(
+                    preferredAgentName != null
+                        ? $"Agent '{preferredAgentName}' is not available"
+                        : "No human agents available");
 
             var transfer = new CallTransfer
             {
@@ -44,6 +61,13 @@ namespace backend.Services
                 CallSessionId = callSessionId,
                 FromParticipantId = fromParticipant?.Id,
                 ToHumanAgentId = availableAgent.Id,
+                Mode = TransferMode.Cold,
+                TargetType = TransferTargetType.HumanAgent,
+                TargetSnapshotJson = JsonSerializer.Serialize(new
+                {
+                    agentId = availableAgent.Id,
+                    name = availableAgent.Name
+                }),
                 Status = CallTransferStatus.Requested,
                 Reason = reason,
                 RequestedAt = DateTime.UtcNow,
@@ -141,6 +165,20 @@ namespace backend.Services
             transfer.ToHumanAgent.Status = HumanAgentStatus.InCall;
 
             await _db.SaveChangesAsync();
+
+            // Cold-swap fallback for webhook-less setups: remove the AI shortly
+            // after accept. Webhook-driven swap remains authoritative and idempotent.
+            var roomName = session?.LivekitRoomName;
+            if (!string.IsNullOrEmpty(roomName))
+            {
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(3));
+                    using var scope = _scopeFactory.CreateScope();
+                    var lk = scope.ServiceProvider.GetRequiredService<LiveKitService>();
+                    await lk.RemoveParticipant(roomName, InboundRoutingService.AiIdentity);
+                });
+            }
 
             return new CallTransferDto(
                 transfer.Id,
@@ -358,7 +396,9 @@ namespace backend.Services
                 .FirstOrDefaultAsync();
         }
 
-        private async Task<HumanAgent?> FindAvailableAgentAsync(Guid ownerUserId, Guid? excludeAgentId = null)
+        private async Task<HumanAgent?> FindAvailableAgentAsync(Guid ownerUserId,
+            Guid? excludeAgentId = null, Guid? preferredAgentId = null,
+            string? preferredAgentName = null)
         {
             var busyStatuses = new List<CallTransferStatus> { CallTransferStatus.Requested, CallTransferStatus.Ringing, CallTransferStatus.Accepted };
 
@@ -368,19 +408,173 @@ namespace backend.Services
                     && a.IsActive)
                 .ToListAsync();
 
+            if (preferredAgentId.HasValue || !string.IsNullOrEmpty(preferredAgentName))
+            {
+                var named = agents
+                    .Where(a => (preferredAgentId.HasValue && a.Id == preferredAgentId.Value)
+                        || (!string.IsNullOrEmpty(preferredAgentName) &&
+                            (string.Equals(a.Name, preferredAgentName, StringComparison.OrdinalIgnoreCase))))
+                    .FirstOrDefault();
+                if (named != null && await HasCapacityAsync(named, busyStatuses)) return named;
+
+                // Fallback: unique prefix match on the spoken name.
+                if (!string.IsNullOrEmpty(preferredAgentName))
+                {
+                    var fuzzy = agents.FirstOrDefault(a =>
+                        a.Name.StartsWith(preferredAgentName, StringComparison.OrdinalIgnoreCase));
+                    if (fuzzy != null && await HasCapacityAsync(fuzzy, busyStatuses)) return fuzzy;
+                }
+                return null; // explicit target requested — never substitute another agent
+            }
+
             foreach (var agent in agents)
             {
                 if (excludeAgentId.HasValue && agent.Id == excludeAgentId.Value)
                     continue;
 
-                var activeTransfers = await _db.CallTransfers
-                    .CountAsync(t => t.ToHumanAgentId == agent.Id && busyStatuses.Contains(t.Status));
-
-                if (activeTransfers < agent.MaxConcurrentCalls)
+                if (await HasCapacityAsync(agent, busyStatuses))
                     return agent;
             }
 
             return null;
+        }
+
+        private async Task<bool> HasCapacityAsync(HumanAgent agent, List<CallTransferStatus> busyStatuses)
+        {
+            var activeTransfers = await _db.CallTransfers
+                .CountAsync(t => t.ToHumanAgentId == agent.Id && busyStatuses.Contains(t.Status));
+            return activeTransfers < agent.MaxConcurrentCalls;
+        }
+
+        // ── v0 destination transfers (external PBX via outbound trunk) ────
+
+        public async Task<CallTransferDto?> InitiateDestinationTransferAsync(
+            Guid callSessionId, Guid userId, string destinationName, string? reason)
+        {
+            var session = await _db.CallSessions
+                .FirstOrDefaultAsync(c => c.Id == callSessionId && c.UserId == userId);
+            if (session == null) return null;
+
+            var destination = await _db.SipDestinations
+                .FirstOrDefaultAsync(d => d.UserId == userId
+                    && d.IsEnabled
+                    && d.Name.ToLower() == destinationName.ToLower());
+            if (destination == null)
+                throw new InvalidOperationException($"Destination '{destinationName}' not found");
+
+            var fromParticipant = await _db.CallParticipants
+                .FirstOrDefaultAsync(p => p.CallSessionId == callSessionId
+                    && p.ParticipantType == ParticipantType.AiAgent);
+
+            var transfer = new CallTransfer
+            {
+                Id = Guid.NewGuid(),
+                CallSessionId = callSessionId,
+                FromParticipantId = fromParticipant?.Id,
+                DestinationId = destination.Id,
+                Mode = TransferMode.Cold,
+                TargetType = TransferTargetType.ExternalDestination,
+                TargetSnapshotJson = JsonSerializer.Serialize(new
+                {
+                    name = destination.Name,
+                    callTo = destination.CallTo
+                }),
+                Status = CallTransferStatus.Requested,
+                Reason = reason,
+                RequestedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            _db.CallTransfers.Add(transfer);
+            await _db.SaveChangesAsync();
+
+            // Fire-and-forget dial-out; completion is observed by webhook or poller.
+            var transferId = transfer.Id;
+            var roomId = session.Id;
+            var roomName = session.LivekitRoomName;
+            var identity = $"{InboundRoutingService.DestinationIdentityPrefix}{destination.Id}";
+            _ = Task.Run(() => DialOutAndSwapAsync(transferId, roomId, roomName,
+                destination.CallTo, identity));
+
+            return new CallTransferDto(
+                transfer.Id,
+                transfer.CallSessionId,
+                transfer.FromParticipantId,
+                transfer.ToHumanAgentId,
+                destination.Name,
+                transfer.Status.ToString(),
+                transfer.Reason,
+                transfer.FailureReason,
+                transfer.RequestedAt,
+                transfer.AcceptedAt,
+                transfer.CompletedAt,
+                transfer.FailedAt,
+                transfer.CreatedAt,
+                transfer.UpdatedAt
+            );
+        }
+
+        private async Task DialOutAndSwapAsync(Guid transferId, Guid sessionId,
+            string roomName, string callTo, string identity)
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var liveKit = scope.ServiceProvider.GetRequiredService<LiveKitService>();
+                var routing = scope.ServiceProvider.GetRequiredService<InboundRoutingService>();
+
+                var trunkId = Environment.GetEnvironmentVariable("LIVEKIT_OUTBOUND_TRUNK_ID");
+                if (string.IsNullOrEmpty(trunkId))
+                {
+                    await FailDestinationTransferAsync(db, transferId, "Outbound trunk is not configured");
+                    return;
+                }
+
+                var created = await liveKit.CreateSipParticipant(trunkId, callTo, roomName, identity,
+                    displayName: $"dest-{callTo}");
+                if (created == null)
+                {
+                    await FailDestinationTransferAsync(db, transferId, "SIP dial failed");
+                    return;
+                }
+
+                // Poll for the bridged participant answering (webhook completes sooner).
+                var deadline = DateTime.UtcNow.AddSeconds(45);
+                while (DateTime.UtcNow < deadline)
+                {
+                    var identities = await liveKit.ListParticipantIdentities(roomName);
+                    if (identities.Contains(identity))
+                        return; // webhook performs the swap
+
+                    await Task.Delay(TimeSpan.FromSeconds(3));
+
+                    var t = await db.CallTransfers.FindAsync(transferId);
+                    if (t == null || t.Status != CallTransferStatus.Requested)
+                        return; // already completed/failed elsewhere
+                }
+
+                await FailDestinationTransferAsync(db, transferId, "Destination did not answer within 45s");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Dial-out failed for transfer {Transfer}", transferId);
+                using var scope = _scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                await FailDestinationTransferAsync(db, transferId, ex.Message);
+            }
+        }
+
+        private static async Task FailDestinationTransferAsync(AppDbContext db,
+            Guid transferId, string reason)
+        {
+            var transfer = await db.CallTransfers.FindAsync(transferId);
+            if (transfer == null || transfer.Status != CallTransferStatus.Requested) return;
+            transfer.Status = CallTransferStatus.Failed;
+            transfer.FailureReason = reason;
+            transfer.FailedAt = DateTime.UtcNow;
+            transfer.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
         }
     }
 }

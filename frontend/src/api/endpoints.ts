@@ -1,4 +1,4 @@
-import api from './client';
+﻿import api from './client';
 
 export interface CallSession {
   id: string;
@@ -145,6 +145,18 @@ export interface AgentStatsDto {
   lastActiveAt?: string | null;
 }
 
+export interface SipDestinationItem {
+  id: string;
+  name: string;
+  description?: string | null;
+  callTo: string;
+  isEnabled: boolean;
+}
+
+export interface TransferOptions {
+  agents: { type: "human"; name: string; available: boolean }[];
+  destinations: { type: "destination"; name: string; available: boolean }[];
+}
 export interface PersonaListItem {
   id: string;
   name: string;
@@ -277,6 +289,21 @@ export interface PersonaVersionDto {
   createdAt: string;
 }
 
+export const sipDestinationsApi = {
+  list: () => api.get<SipDestinationItem[]>('/api/sip/destinations'),
+  create: (data: { name: string; callTo: string; description?: string }) =>
+    api.post<SipDestinationItem>('/api/sip/destinations', data),
+  update: (id: string, data: { name?: string; callTo?: string; description?: string; isEnabled?: boolean }) =>
+    api.patch<SipDestinationItem>(`/api/sip/destinations/${id}`, data),
+  remove: (id: string) => api.del<void>(`/api/sip/destinations/${id}`),
+  options: () => api.get<TransferOptions>('/api/sip/destinations/options'),
+};
+
+export const personaRoutingApi = {
+  getDefault: () => api.get<{ defaultPersonaId: string | null }>('/api/personas/default'),
+  setDefault: (personaId: string | null) =>
+    api.put<{ defaultPersonaId: string | null }>('/api/personas/default', { personaId }),
+};
 export const personasApi = {
   list: () => api.get<PersonaListItem[]>('/api/personas'),
   get: (id: string) => api.get<PersonaListItem>(`/api/personas/${id}`),
@@ -486,7 +513,7 @@ export interface HumanAgentAdminDto {
   id: string;
   name: string;
   email?: string | null;
-  /** Serialized as a numeric enum: 0 Offline · 1 Available · 2 Break · 3 NotReady · 4 InCall */
+  /** Serialized as a numeric enum: 0 Offline Â· 1 Available Â· 2 Break Â· 3 NotReady Â· 4 InCall */
   status: string | number;
   isActive: boolean;
   maxConcurrentCalls: number;
@@ -559,3 +586,5 @@ export const partnersApi = {
   list: () => api.get<PartnerDto[]>('/api/partners'),
   stats: (partnerId: string) => api.get<Record<string, unknown>>(`/api/partners/${partnerId}/stats`),
 };
+
+

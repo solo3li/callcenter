@@ -1,9 +1,12 @@
-using System;
+﻿using System;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using backend.Data;
 using backend.Dtos;
@@ -23,6 +26,14 @@ namespace backend.Tests.Services
                 .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
                 .Options;
             return new AppDbContext(options);
+        }
+
+        private CallTransferService BuildTransferService(AppDbContext db, Mock<IHubContext<CallHub>> hub)
+        {
+            var liveKit = new LiveKitService(new HttpClient());
+            var scopeFactory = new Mock<IServiceScopeFactory>();
+            return new CallTransferService(db, hub.Object, liveKit,
+                scopeFactory.Object, NullLogger<CallTransferService>.Instance);
         }
 
         private Mock<IHubContext<CallHub>> CreateMockHub()
@@ -84,7 +95,7 @@ namespace backend.Tests.Services
             var mockHub = CreateMockHub();
 
             var sessionService = new CallSessionService(db);
-            var transferService = new CallTransferService(db, mockHub.Object);
+            var transferService = BuildTransferService(db, mockHub);
             var handoffService = new CallHandoffService(db);
 
             var roomName = CallSessionService.GenerateRoomName();
@@ -136,7 +147,7 @@ namespace backend.Tests.Services
 
             var mockHub = CreateMockHub();
             var sessionService = new CallSessionService(db);
-            var transferService = new CallTransferService(db, mockHub.Object);
+            var transferService = BuildTransferService(db, mockHub);
 
             var roomName = CallSessionService.GenerateRoomName();
             var session = await sessionService.CreateAsync(user.Id, null, null, roomName, "Inbound");
@@ -178,7 +189,7 @@ namespace backend.Tests.Services
 
             var mockHub = CreateMockHub();
             var sessionService = new CallSessionService(db);
-            var transferService = new CallTransferService(db, mockHub.Object);
+            var transferService = BuildTransferService(db, mockHub);
 
             var roomName = CallSessionService.GenerateRoomName();
             var session = await sessionService.CreateAsync(user.Id, null, null, roomName, "Inbound");

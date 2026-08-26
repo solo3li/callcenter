@@ -88,7 +88,7 @@ namespace backend.Dtos
         Guid Id,
         Guid CallSessionId,
         Guid? FromParticipantId,
-        Guid ToHumanAgentId,
+        Guid? ToHumanAgentId,
         string ToHumanAgentName,
         string Status,
         string? Reason,

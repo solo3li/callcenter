@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+﻿import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import "./index.css";
@@ -14,6 +14,7 @@ import QueuePage from "./dashboard/pages/QueuePage";
 import PersonasPage from "./dashboard/pages/PersonasPage";
 import WorkflowsPage from "./dashboard/pages/WorkflowsPage";
 import CallConfigsPage from "./dashboard/pages/CallConfigsPage";
+import SipDestinationsPage from "./dashboard/pages/SipDestinationsPage";
 import KnowledgePage from "./dashboard/pages/KnowledgePage";
 import UsagePage from "./dashboard/pages/UsagePage";
 import ApiKeysPage from "./dashboard/pages/ApiKeysPage";
@@ -51,6 +52,7 @@ const router = createBrowserRouter([
       { path: "personas", element: <PersonasPage /> },
       { path: "workflows", element: <WorkflowsPage /> },
       { path: "configs", element: <CallConfigsPage /> },
+      { path: "sip-destinations", element: <SipDestinationsPage /> },
       { path: "knowledge", element: <KnowledgePage /> },
       { path: "usage", element: <UsagePage /> },
       { path: "api-keys", element: <ApiKeysPage /> },
@@ -68,3 +70,4 @@ createRoot(document.getElementById("root")!).render(
     </AuthProvider>
   </StrictMode>
 );
+

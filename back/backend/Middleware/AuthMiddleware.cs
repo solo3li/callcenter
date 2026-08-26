@@ -37,7 +37,16 @@ namespace backend.Middleware
                 path.StartsWith("/swagger") ||
                 path.StartsWith("/api/token") ||
                 path.StartsWith("/api/livekit/") ||
+                path.StartsWith("/api/webhooks/") ||
                 path.StartsWith("/api/call/"))
+            {
+                await _next(context);
+                return;
+            }
+
+            // Persona published contract: authenticated via service token inside
+            // the endpoint (worker), or normal user JWT (owner preview).
+            if (path.StartsWith("/api/personas/") && path.EndsWith("/published"))
             {
                 await _next(context);
                 return;

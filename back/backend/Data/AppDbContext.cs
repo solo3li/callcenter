@@ -34,6 +34,9 @@ public class AppDbContext : DbContext
     public DbSet<CallConfiguration> CallConfigurations { get; set; } = null!;
     public DbSet<CallConfigurationAction> CallConfigurationActions { get; set; } = null!;
     public DbSet<CallSession> CallSessions { get; set; } = null!;
+    public DbSet<CallLeg> CallLegs { get; set; } = null!;
+    public DbSet<SipConnection> SipConnections { get; set; } = null!;
+    public DbSet<SipDestination> SipDestinations { get; set; } = null!;
     public DbSet<CallParticipant> CallParticipants { get; set; } = null!;
     public DbSet<CallTransfer> CallTransfers { get; set; } = null!;
     public DbSet<CallHandoff> CallHandoffs { get; set; } = null!;
@@ -117,6 +120,55 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.Email).IsUnique();
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.CreatedAt);
+
+            entity.HasOne(e => e.DefaultPersona)
+                .WithMany()
+                .HasForeignKey(e => e.DefaultPersonaId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(e => e.DefaultPersonaId);
+        });
+
+        // ── SIP CONNECTIONS (inbound customer trunks) ─────────────────
+        modelBuilder.Entity<SipConnection>(entity =>
+        {
+            entity.ToTable("sip_connections");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.AllowedIps).HasColumnType("text[]");
+            entity.Property(e => e.Numbers).HasColumnType("text[]");
+            entity.Property(e => e.LkTrunkId).HasMaxLength(64);
+            entity.Property(e => e.DispatchRuleId).HasMaxLength(64);
+            entity.Property(e => e.CreatedAt).HasColumnType("timestamptz");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamptz");
+
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.UserId, e.Name }).IsUnique();
+            entity.HasIndex(e => e.LkTrunkId).IsUnique();
+            entity.HasIndex(e => e.IsActive);
+        });
+
+        // ── SIP DESTINATIONS (named external PBX targets) ─────────────
+        modelBuilder.Entity<SipDestination>(entity =>
+        {
+            entity.ToTable("sip_destinations");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.Description).HasMaxLength(256);
+            entity.Property(e => e.CallTo).IsRequired().HasMaxLength(256);
+            entity.Property(e => e.CreatedAt).HasColumnType("timestamptz");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamptz");
+
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.UserId, e.Name }).IsUnique();
+            entity.HasIndex(e => e.IsEnabled);
         });
 
         // ── PARTNERS ──────────────────────────────────────────────────
@@ -538,6 +590,7 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.LivekitRoomName).IsRequired().HasMaxLength(256);
             entity.Property(e => e.LivekitRoomSid).HasMaxLength(256);
+            entity.Property(e => e.DialedNumber).HasMaxLength(32);
             entity.Property(e => e.Status).IsRequired();
             entity.Property(e => e.Direction).IsRequired();
             entity.Property(e => e.StartedAt).HasColumnType("timestamptz");
@@ -571,11 +624,39 @@ public class AppDbContext : DbContext
                 .HasForeignKey(e => e.ApiKeyId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            entity.HasOne(e => e.OriginSipConnection)
+                .WithMany()
+                .HasForeignKey(e => e.OriginSipConnectionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.StartedAt);
             entity.HasIndex(e => e.LivekitRoomName);
+            entity.HasIndex(e => e.OriginSipConnectionId);
             entity.HasIndex(e => new { e.UserId, e.StartedAt });
+        });
+
+        // ── CALL LEGS (ordered media sides of a session) ──────────────
+        modelBuilder.Entity<CallLeg>(entity =>
+        {
+            entity.ToTable("call_legs");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ParticipantIdentity).HasMaxLength(256);
+            entity.Property(e => e.HangupCause).HasMaxLength(128);
+            entity.Property(e => e.Kind).HasConversion<string>().HasColumnType("varchar(32)");
+            entity.Property(e => e.StartedAt).HasColumnType("timestamptz");
+            entity.Property(e => e.AnsweredAt).HasColumnType("timestamptz");
+            entity.Property(e => e.EndedAt).HasColumnType("timestamptz");
+
+            entity.HasOne(e => e.CallSession)
+                .WithMany(c => c.Legs)
+                .HasForeignKey(e => e.CallSessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.CallSessionId, e.LegIndex }).IsUnique();
+            entity.HasIndex(e => e.CallSessionId);
+            entity.HasIndex(e => e.Kind);
         });
 
         // ── CALL PARTICIPANTS ─────────────────────────────────────────
@@ -612,6 +693,9 @@ public class AppDbContext : DbContext
             entity.ToTable("call_transfers");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Status).IsRequired();
+            entity.Property(e => e.Mode).HasConversion<string>().HasColumnType("varchar(16)").IsRequired();
+            entity.Property(e => e.TargetType).HasConversion<string>().HasColumnType("varchar(32)").IsRequired();
+            entity.Property(e => e.TargetSnapshotJson).HasColumnType("jsonb");
             entity.Property(e => e.RequestedAt).HasColumnType("timestamptz");
             entity.Property(e => e.AcceptedAt).HasColumnType("timestamptz");
             entity.Property(e => e.CompletedAt).HasColumnType("timestamptz");
@@ -632,10 +716,16 @@ public class AppDbContext : DbContext
             entity.HasOne(e => e.ToHumanAgent)
                 .WithMany(a => a.CallTransfers)
                 .HasForeignKey(e => e.ToHumanAgentId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.Destination)
+                .WithMany()
+                .HasForeignKey(e => e.DestinationId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(e => e.CallSessionId);
             entity.HasIndex(e => e.ToHumanAgentId);
+            entity.HasIndex(e => e.DestinationId);
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.RequestedAt);
         });

@@ -1,4 +1,3 @@
-namespace backend.Dtos;
 
 public sealed record PersonaListItem(
     Guid Id,
@@ -39,3 +38,5 @@ public sealed record PublishVersionRequest(
     Guid PersonaId,
     Guid VersionId
 );
+public sealed record SetDefaultPersonaRequest(Guid? PersonaId);
+

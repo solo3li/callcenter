@@ -1,5 +1,6 @@
 using backend.Data;
 using backend.Dtos;
+using backend.Middleware;
 using backend.Models.Domain;
 using backend.Services;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +27,46 @@ public static class PersonaEndpoints
             return persona is not null ? Results.Ok(persona) : Results.NotFound();
         });
 
+        // Worker contract: persona instructions for the AI agent. Authenticated
+        // either by the shared service token or as the owning user.
+        group.MapGet("/{id:guid}/published", async (Guid id, AppDbContext db, HttpContext http) =>
+        {
+            if (!ServiceAuth.IsConfiguredOrValid(http) &&
+                !http.Items.ContainsKey("UserId"))
+                return Results.Unauthorized();
+
+            Guid? requesterId = http.Items.TryGetValue("UserId", out var v) ? (Guid?)v : null;
+
+            var persona = await db.Personas
+                .Include(p => p.Versions)
+                .FirstOrDefaultAsync(p => p.Id == id && p.IsActive);
+
+            if (persona == null)
+                return Results.NotFound();
+
+            if (requesterId.HasValue && persona.UserId != requesterId.Value &&
+                !ServiceAuth.IsConfiguredOrValid(http))
+                return Results.Forbid();
+
+            var version = persona.Versions
+                .Where(v => v.IsPublished)
+                .OrderByDescending(v => v.VersionNumber)
+                .FirstOrDefault()
+                ?? persona.Versions.OrderByDescending(v => v.VersionNumber).FirstOrDefault();
+
+            if (version == null)
+                return Results.NotFound(new { error = "Persona has no versions" });
+
+            return Results.Ok(new
+            {
+                personaName = persona.Name,
+                systemPrompt = version.SystemPrompt,
+                configurationJson = string.IsNullOrEmpty(version.ConfigurationJson)
+                    ? "{}"
+                    : version.ConfigurationJson
+            });
+        });
+
         group.MapPost("/", async (CreatePersonaRequest request, PersonaService service, HttpContext http) =>
         {
             var userId = (Guid)http.Items["UserId"]!;
@@ -45,6 +86,35 @@ public static class PersonaEndpoints
             var userId = (Guid)http.Items["UserId"]!;
             var deleted = await service.DeleteAsync(id, userId);
             return deleted ? Results.NoContent() : Results.NotFound();
+        });
+
+        // Global per-user AI persona used by inbound SIP routing.
+        group.MapPut("/default", async (SetDefaultPersonaRequest req, AppDbContext db, HttpContext http) =>
+        {
+            var userId = (Guid)http.Items["UserId"]!;
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null) return Results.NotFound();
+
+            if (req.PersonaId == null)
+            {
+                user.DefaultPersonaId = null;
+            }
+            else
+            {
+                var owns = await db.Personas.AnyAsync(p => p.Id == req.PersonaId.Value && p.UserId == userId);
+                if (!owns) return Results.BadRequest(new { error = "Persona not found for this account" });
+                user.DefaultPersonaId = req.PersonaId.Value;
+            }
+            await db.SaveChangesAsync();
+            return Results.Ok(new { defaultPersonaId = user.DefaultPersonaId });
+        });
+
+        group.MapGet("/default", async (AppDbContext db, HttpContext http) =>
+        {
+            var userId = (Guid)http.Items["UserId"]!;
+            var id = await db.Users.Where(u => u.Id == userId)
+                .Select(u => u.DefaultPersonaId).FirstOrDefaultAsync();
+            return Results.Ok(new { defaultPersonaId = id });
         });
 
         var actionGroup = group.MapGroup("/{personaId:guid}/actions");

@@ -8,7 +8,11 @@ public class CallTransfer
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid CallSessionId { get; set; }
     public Guid? FromParticipantId { get; set; }
-    public Guid ToHumanAgentId { get; set; }
+    public Guid? ToHumanAgentId { get; set; }
+    public TransferMode Mode { get; set; } = TransferMode.Cold;
+    public TransferTargetType TargetType { get; set; } = TransferTargetType.HumanAgent;
+    public Guid? DestinationId { get; set; }
+    public string? TargetSnapshotJson { get; set; }
     public CallTransferStatus Status { get; set; } = CallTransferStatus.Requested;
     public string? Reason { get; set; }
     public string? FailureReason { get; set; }
@@ -21,6 +25,7 @@ public class CallTransfer
 
     public CallSession CallSession { get; set; } = null!;
     public CallParticipant? FromParticipant { get; set; }
-    public HumanAgent ToHumanAgent { get; set; } = null!;
+    public HumanAgent? ToHumanAgent { get; set; }
+    public SipDestination? Destination { get; set; }
     public CallHandoff? Handoff { get; set; }
 }
