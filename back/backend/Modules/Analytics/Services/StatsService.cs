@@ -4,7 +4,11 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using backend.Data;
-using backend.Dtos;
+using backend.Modules.Identity.Dtos;
+using backend.Modules.Billing.Dtos;
+using backend.Modules.CallOperations.Dtos;
+using backend.Modules.Configuration.Dtos;
+using backend.Modules.Analytics.Dtos;
 
 namespace backend.Services
 {
