@@ -1,6 +1,6 @@
 using System;
 
-namespace backend.Models.Domain;
+namespace backend.Modules.Identity.Models;
 
 public class PartnerExternalCustomer
 {

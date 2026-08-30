@@ -1,7 +1,7 @@
 using System;
 using backend.Models.Enums;
 
-namespace backend.Models.Domain;
+namespace backend.Modules.Identity.Models;
 
 public class PartnerPlan
 {

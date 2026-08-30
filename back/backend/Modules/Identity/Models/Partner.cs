@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace backend.Models.Domain;
+namespace backend.Modules.Identity.Models;
 
 public class Partner
 {

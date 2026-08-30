@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using backend.Models.Enums;
 
-namespace backend.Models.Domain;
+namespace backend.Modules.Identity.Models;
 
 public class User
 {

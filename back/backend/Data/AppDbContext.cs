@@ -106,7 +106,7 @@ public class AppDbContext : DbContext
         // ── USERS ─────────────────────────────────────────────────────
         modelBuilder.Entity<User>(entity =>
         {
-            entity.ToTable("users");
+            entity.ToTable("users", "identity");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Email).IsRequired().HasMaxLength(320);
             entity.Property(e => e.DisplayName).IsRequired().HasMaxLength(256);
@@ -174,7 +174,7 @@ public class AppDbContext : DbContext
         // ── PARTNERS ──────────────────────────────────────────────────
         modelBuilder.Entity<Partner>(entity =>
         {
-            entity.ToTable("partners");
+            entity.ToTable("partners", "identity");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.OrganizationName).IsRequired().HasMaxLength(256);
             entity.Property(e => e.ContactEmail).HasMaxLength(320);
@@ -196,7 +196,7 @@ public class AppDbContext : DbContext
         // ── PARTNER RELATIONSHIPS ─────────────────────────────────────
         modelBuilder.Entity<PartnerRelationship>(entity =>
         {
-            entity.ToTable("partner_relationships");
+            entity.ToTable("partner_relationships", "identity");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Status).IsRequired();
             entity.Property(e => e.MetadataJson).HasColumnType("jsonb");
@@ -222,7 +222,7 @@ public class AppDbContext : DbContext
         // ── PARTNER EXTERNAL CUSTOMERS ────────────────────────────────
         modelBuilder.Entity<PartnerExternalCustomer>(entity =>
         {
-            entity.ToTable("partner_external_customers");
+            entity.ToTable("partner_external_customers", "identity");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ExternalCustomerId).IsRequired().HasMaxLength(256);
             entity.Property(e => e.CreatedAt).HasColumnType("timestamptz");
@@ -244,7 +244,7 @@ public class AppDbContext : DbContext
         // ── API KEYS ──────────────────────────────────────────────────
         modelBuilder.Entity<ApiKey>(entity =>
         {
-            entity.ToTable("api_keys");
+            entity.ToTable("api_keys", "identity");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(256);
             entity.Property(e => e.KeyPrefix).IsRequired().HasMaxLength(16);
@@ -854,7 +854,7 @@ public class AppDbContext : DbContext
         // ── LICENSES ──────────────────────────────────────────────────
         modelBuilder.Entity<License>(entity =>
         {
-            entity.ToTable("licenses");
+            entity.ToTable("licenses", "identity");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Status).IsRequired();
             entity.Property(e => e.StartsAt).HasColumnType("timestamptz");
