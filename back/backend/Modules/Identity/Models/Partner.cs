@@ -1,4 +1,5 @@
 using System;
+using backend.Modules.Billing.Models;
 using System.Collections.Generic;
 
 namespace backend.Modules.Identity.Models;

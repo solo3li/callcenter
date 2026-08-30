@@ -1,7 +1,12 @@
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using MediatR;
 using backend.Dtos;
-using backend.Services;
+using backend.Modules.CallOperations.Features.CallTransfers.ListCallTransfers;
+using backend.Modules.CallOperations.Features.CallTransfers.GetCallTransfer;
+using backend.Modules.CallOperations.Features.CallTransfers.InitiateTransfer;
+using backend.Modules.CallOperations.Features.CallTransfers.AcceptTransfer;
+using backend.Modules.CallOperations.Features.CallTransfers.RejectTransfer;
+using backend.Modules.CallOperations.Features.CallTransfers.CompleteTransfer;
 
 namespace backend.Endpoints
 {
@@ -13,50 +18,47 @@ namespace backend.Endpoints
 
             group.MapGet("/", async (
                 Guid callSessionId,
-                CallTransferService service) =>
+                IMediator mediator) =>
             {
-                var result = await service.ListForCallAsync(callSessionId);
+                var result = await mediator.Send(new ListCallTransfersQuery(callSessionId));
                 return Results.Ok(result);
             });
 
             group.MapGet("/{transferId:guid}", async (
                 Guid callSessionId,
                 Guid transferId,
-                CallTransferService service) =>
+                IMediator mediator) =>
             {
-                var result = await service.GetByIdAsync(callSessionId, transferId);
+                var result = await mediator.Send(new GetCallTransferQuery(callSessionId, transferId));
                 return result is not null ? Results.Ok(result) : Results.NotFound();
             });
 
             group.MapPost("/", async (
                 Guid callSessionId,
                 [FromBody] InitiateTransferRequest request,
-                CallTransferService service,
+                IMediator mediator,
                 HttpContext http) =>
             {
                 var userId = (Guid)http.Items["UserId"]!;
                 try
                 {
-                    var targetType = request.TargetType?.Trim().ToLowerInvariant();
+                    var result = await mediator.Send(new InitiateTransferCommand(
+                        callSessionId, userId, request.TargetType, request.TargetName, request.Reason));
 
-                    if (targetType == "destination")
+                    if (result is null) return Results.NotFound();
+
+                    if (result is CallTransferDto destResult)
                     {
-                        if (string.IsNullOrWhiteSpace(request.TargetName))
-                            return Results.BadRequest("TargetName is required for destination transfers");
-
-                        var destResult = await service.InitiateDestinationTransferAsync(
-                            callSessionId, userId, request.TargetName!, request.Reason);
-                        return destResult is not null
-                            ? Results.Created(
-                                $"/api/calls/{callSessionId}/transfers/{destResult.Id}",
-                                new { transfer = destResult })
-                            : Results.NotFound();
+                        return Results.Created(
+                            $"/api/calls/{callSessionId}/transfers/{destResult.Id}",
+                            new { transfer = destResult });
+                    }
+                    else if (result is TransferResponse tr)
+                    {
+                        return Results.Created($"/api/calls/{callSessionId}/transfers/{tr.Transfer.Id}", tr);
                     }
 
-                    var result = await service.InitiateTransferAsync(callSessionId, userId, request.Reason);
-                    return result is not null
-                        ? Results.Created($"/api/calls/{callSessionId}/transfers/{result.Transfer.Id}", result)
-                        : Results.NotFound();
+                    return Results.NotFound();
                 }
                 catch (InvalidOperationException ex)
                 {
@@ -68,9 +70,9 @@ namespace backend.Endpoints
                 Guid callSessionId,
                 Guid transferId,
                 [FromBody] AcceptTransferBody body,
-                CallTransferService service) =>
+                IMediator mediator) =>
             {
-                var result = await service.AcceptTransferAsync(transferId, body.HumanAgentId);
+                var result = await mediator.Send(new AcceptTransferCommand(transferId, body.HumanAgentId));
                 return result is not null ? Results.Ok(result) : Results.NotFound();
             });
 
@@ -78,18 +80,18 @@ namespace backend.Endpoints
                 Guid callSessionId,
                 Guid transferId,
                 [FromBody] RejectTransferBody body,
-                CallTransferService service) =>
+                IMediator mediator) =>
             {
-                var result = await service.RejectTransferAsync(transferId, body.HumanAgentId);
+                var result = await mediator.Send(new RejectTransferCommand(transferId, body.HumanAgentId));
                 return result is not null ? Results.Ok(result) : Results.NotFound();
             });
 
             group.MapPost("/{transferId:guid}/complete", async (
                 Guid callSessionId,
                 Guid transferId,
-                CallTransferService service) =>
+                IMediator mediator) =>
             {
-                var result = await service.CompleteTransferAsync(transferId);
+                var result = await mediator.Send(new CompleteTransferCommand(transferId));
                 return result is not null ? Results.Ok(result) : Results.NotFound();
             });
         }

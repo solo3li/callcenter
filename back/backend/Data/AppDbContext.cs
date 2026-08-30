@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using backend.Models;
 using backend.Models.Domain;
 using backend.Models.Enums;
+using backend.Modules.Billing.Models;
+using backend.Modules.Configuration.Models;
 
 namespace backend.Data;
 
@@ -342,7 +344,7 @@ public class AppDbContext : DbContext
         // ── PERSONAS ──────────────────────────────────────────────────
         modelBuilder.Entity<Persona>(entity =>
         {
-            entity.ToTable("personas");
+            entity.ToTable("personas", "configuration");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(256);
             entity.Property(e => e.CreatedAt).HasColumnType("timestamptz");
@@ -398,7 +400,7 @@ public class AppDbContext : DbContext
         // ── WORKFLOWS ─────────────────────────────────────────────────
         modelBuilder.Entity<Workflow>(entity =>
         {
-            entity.ToTable("workflows");
+            entity.ToTable("workflows", "configuration");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(256);
             entity.Property(e => e.CreatedAt).HasColumnType("timestamptz");
@@ -793,7 +795,7 @@ public class AppDbContext : DbContext
         // ── PLANS ─────────────────────────────────────────────────────
         modelBuilder.Entity<Plan>(entity =>
         {
-            entity.ToTable("plans");
+            entity.ToTable("plans", "billing");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(256);
             entity.Property(e => e.Tier).IsRequired();
@@ -808,7 +810,7 @@ public class AppDbContext : DbContext
         // ── PARTNER PLANS ─────────────────────────────────────────────
         modelBuilder.Entity<PartnerPlan>(entity =>
         {
-            entity.ToTable("partner_plans");
+            entity.ToTable("partner_plans", "identity");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(256);
             entity.Property(e => e.EntitlementsJson).HasColumnType("jsonb");
@@ -827,7 +829,7 @@ public class AppDbContext : DbContext
         // ── SUBSCRIPTIONS ─────────────────────────────────────────────
         modelBuilder.Entity<Subscription>(entity =>
         {
-            entity.ToTable("subscriptions");
+            entity.ToTable("subscriptions", "billing");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Status).IsRequired();
             entity.Property(e => e.StartsAt).HasColumnType("timestamptz");
@@ -888,7 +890,7 @@ public class AppDbContext : DbContext
         // ── USAGE RECORDS ─────────────────────────────────────────────
         modelBuilder.Entity<UsageRecord>(entity =>
         {
-            entity.ToTable("usage_records");
+            entity.ToTable("usage_records", "billing");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.IdempotencyKey).IsRequired().HasMaxLength(128);
             entity.Property(e => e.MetricType).IsRequired();
@@ -929,7 +931,7 @@ public class AppDbContext : DbContext
         // ── KNOWLEDGE BASES ───────────────────────────────────────────
         modelBuilder.Entity<KnowledgeBase>(entity =>
         {
-            entity.ToTable("knowledge_bases");
+            entity.ToTable("knowledge_bases", "configuration");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(256);
             entity.Property(e => e.CreatedAt).HasColumnType("timestamptz");

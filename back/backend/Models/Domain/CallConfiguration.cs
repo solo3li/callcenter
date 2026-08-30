@@ -1,4 +1,5 @@
 using System;
+using backend.Modules.Configuration.Models;
 using backend.Models.Enums;
 
 namespace backend.Models.Domain;

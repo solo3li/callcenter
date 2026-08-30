@@ -84,7 +84,7 @@ namespace backend.Migrations.Modular
                         new
                         {
                             Id = 1,
-                            CreatedAt = new DateTime(2026, 8, 30, 16, 11, 25, 211, DateTimeKind.Utc).AddTicks(2249),
+                            CreatedAt = new DateTime(2026, 8, 30, 16, 39, 58, 567, DateTimeKind.Utc).AddTicks(2741),
                             IsOnline = false,
                             PasswordHash = "admin",
                             Status = "Offline",
@@ -834,41 +834,6 @@ namespace backend.Migrations.Modular
                     b.ToTable("human_agent_sessions", (string)null);
                 });
 
-            modelBuilder.Entity("backend.Models.Domain.KnowledgeBase", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamptz");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamptz");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("IsActive");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("knowledge_bases", (string)null);
-                });
-
             modelBuilder.Entity("backend.Models.Domain.KnowledgeChunk", b =>
                 {
                     b.Property<Guid>("Id")
@@ -951,41 +916,6 @@ namespace backend.Migrations.Modular
                     b.ToTable("knowledge_documents", (string)null);
                 });
 
-            modelBuilder.Entity("backend.Models.Domain.Persona", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamptz");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamptz");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("IsActive");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("personas", (string)null);
-                });
-
             modelBuilder.Entity("backend.Models.Domain.PersonaAction", b =>
                 {
                     b.Property<Guid>("PersonaId")
@@ -1058,47 +988,6 @@ namespace backend.Migrations.Modular
                         .IsUnique();
 
                     b.ToTable("persona_versions", (string)null);
-                });
-
-            modelBuilder.Entity("backend.Models.Domain.Plan", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamptz");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<string>("EntitlementsJson")
-                        .HasColumnType("jsonb");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsPlatformPlan")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<int>("Tier")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamptz");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("IsActive");
-
-                    b.HasIndex("Tier");
-
-                    b.ToTable("plans", (string)null);
                 });
 
             modelBuilder.Entity("backend.Models.Domain.SipConnection", b =>
@@ -1198,144 +1087,6 @@ namespace backend.Migrations.Modular
                     b.ToTable("sip_destinations", (string)null);
                 });
 
-            modelBuilder.Entity("backend.Models.Domain.Subscription", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamptz");
-
-                    b.Property<DateTime?>("EndsAt")
-                        .HasColumnType("timestamptz");
-
-                    b.Property<Guid>("PlanId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("StartsAt")
-                        .HasColumnType("timestamptz");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("TrialEndsAt")
-                        .HasColumnType("timestamptz");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamptz");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PlanId");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("subscriptions", (string)null);
-                });
-
-            modelBuilder.Entity("backend.Models.Domain.UsageRecord", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("CallSessionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("IdempotencyKey")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<Guid?>("LicenseId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("MetadataJson")
-                        .HasColumnType("jsonb");
-
-                    b.Property<int>("MetricType")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("OccurredAt")
-                        .HasColumnType("timestamptz");
-
-                    b.Property<Guid?>("PartnerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Quantity")
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<string>("Unit")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CallSessionId");
-
-                    b.HasIndex("IdempotencyKey")
-                        .IsUnique();
-
-                    b.HasIndex("LicenseId");
-
-                    b.HasIndex("MetricType");
-
-                    b.HasIndex("OccurredAt");
-
-                    b.HasIndex("PartnerId");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("UserId", "OccurredAt");
-
-                    b.ToTable("usage_records", (string)null);
-                });
-
-            modelBuilder.Entity("backend.Models.Domain.Workflow", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamptz");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamptz");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("IsActive");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("workflows", (string)null);
-                });
-
             modelBuilder.Entity("backend.Models.Domain.WorkflowExecution", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1414,6 +1165,255 @@ namespace backend.Migrations.Modular
                         .IsUnique();
 
                     b.ToTable("workflow_versions", (string)null);
+                });
+
+            modelBuilder.Entity("backend.Modules.Billing.Models.Plan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EntitlementsJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPlatformPlan")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("Tier")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("Tier");
+
+                    b.ToTable("plans", "billing");
+                });
+
+            modelBuilder.Entity("backend.Modules.Billing.Models.Subscription", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<DateTime?>("EndsAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<Guid>("PlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("StartsAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("TrialEndsAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlanId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("subscriptions", "billing");
+                });
+
+            modelBuilder.Entity("backend.Modules.Billing.Models.UsageRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CallSessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid?>("LicenseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MetadataJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("MetricType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<Guid?>("PartnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CallSessionId");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("LicenseId");
+
+                    b.HasIndex("MetricType");
+
+                    b.HasIndex("OccurredAt");
+
+                    b.HasIndex("PartnerId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "OccurredAt");
+
+                    b.ToTable("usage_records", "billing");
+                });
+
+            modelBuilder.Entity("backend.Modules.Configuration.Models.KnowledgeBase", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("knowledge_bases", "configuration");
+                });
+
+            modelBuilder.Entity("backend.Modules.Configuration.Models.Persona", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("personas", "configuration");
+                });
+
+            modelBuilder.Entity("backend.Modules.Configuration.Models.Workflow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamptz");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("workflows", "configuration");
                 });
 
             modelBuilder.Entity("backend.Modules.Identity.Models.ApiKey", b =>
@@ -1638,7 +1638,7 @@ namespace backend.Migrations.Modular
 
                     b.HasIndex("PartnerId");
 
-                    b.ToTable("partner_plans", (string)null);
+                    b.ToTable("partner_plans", "identity");
                 });
 
             modelBuilder.Entity("backend.Modules.Identity.Models.PartnerRelationship", b =>
@@ -1784,7 +1784,7 @@ namespace backend.Migrations.Modular
 
             modelBuilder.Entity("backend.Models.Domain.CallConfiguration", b =>
                 {
-                    b.HasOne("backend.Models.Domain.Persona", "Persona")
+                    b.HasOne("backend.Modules.Configuration.Models.Persona", "Persona")
                         .WithMany()
                         .HasForeignKey("PersonaId")
                         .OnDelete(DeleteBehavior.SetNull);
@@ -1795,7 +1795,7 @@ namespace backend.Migrations.Modular
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("backend.Models.Domain.Workflow", "Workflow")
+                    b.HasOne("backend.Modules.Configuration.Models.Workflow", "Workflow")
                         .WithMany()
                         .HasForeignKey("WorkflowId")
                         .OnDelete(DeleteBehavior.SetNull);
@@ -2018,17 +2018,6 @@ namespace backend.Migrations.Modular
                     b.Navigation("HumanAgent");
                 });
 
-            modelBuilder.Entity("backend.Models.Domain.KnowledgeBase", b =>
-                {
-                    b.HasOne("backend.Modules.Identity.Models.User", "User")
-                        .WithMany("KnowledgeBases")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("backend.Models.Domain.KnowledgeChunk", b =>
                 {
                     b.HasOne("backend.Models.Domain.KnowledgeDocument", "KnowledgeDocument")
@@ -2042,24 +2031,13 @@ namespace backend.Migrations.Modular
 
             modelBuilder.Entity("backend.Models.Domain.KnowledgeDocument", b =>
                 {
-                    b.HasOne("backend.Models.Domain.KnowledgeBase", "KnowledgeBase")
+                    b.HasOne("backend.Modules.Configuration.Models.KnowledgeBase", "KnowledgeBase")
                         .WithMany("Documents")
                         .HasForeignKey("KnowledgeBaseId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("KnowledgeBase");
-                });
-
-            modelBuilder.Entity("backend.Models.Domain.Persona", b =>
-                {
-                    b.HasOne("backend.Modules.Identity.Models.User", "User")
-                        .WithMany("Personas")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("backend.Models.Domain.PersonaAction", b =>
@@ -2070,7 +2048,7 @@ namespace backend.Migrations.Modular
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("backend.Models.Domain.Persona", "Persona")
+                    b.HasOne("backend.Modules.Configuration.Models.Persona", "Persona")
                         .WithMany("PersonaActions")
                         .HasForeignKey("PersonaId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -2083,13 +2061,13 @@ namespace backend.Migrations.Modular
 
             modelBuilder.Entity("backend.Models.Domain.PersonaKnowledgeBase", b =>
                 {
-                    b.HasOne("backend.Models.Domain.KnowledgeBase", "KnowledgeBase")
+                    b.HasOne("backend.Modules.Configuration.Models.KnowledgeBase", "KnowledgeBase")
                         .WithMany("PersonaKnowledgeBases")
                         .HasForeignKey("KnowledgeBaseId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("backend.Models.Domain.Persona", "Persona")
+                    b.HasOne("backend.Modules.Configuration.Models.Persona", "Persona")
                         .WithMany("PersonaKnowledgeBases")
                         .HasForeignKey("PersonaId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -2102,7 +2080,7 @@ namespace backend.Migrations.Modular
 
             modelBuilder.Entity("backend.Models.Domain.PersonaVersion", b =>
                 {
-                    b.HasOne("backend.Models.Domain.Persona", "Persona")
+                    b.HasOne("backend.Modules.Configuration.Models.Persona", "Persona")
                         .WithMany("Versions")
                         .HasForeignKey("PersonaId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -2133,9 +2111,38 @@ namespace backend.Migrations.Modular
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("backend.Models.Domain.Subscription", b =>
+            modelBuilder.Entity("backend.Models.Domain.WorkflowExecution", b =>
                 {
-                    b.HasOne("backend.Models.Domain.Plan", "Plan")
+                    b.HasOne("backend.Models.Domain.CallSession", "CallSession")
+                        .WithMany("WorkflowExecutions")
+                        .HasForeignKey("CallSessionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("backend.Models.Domain.WorkflowVersion", "WorkflowVersion")
+                        .WithMany()
+                        .HasForeignKey("WorkflowVersionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CallSession");
+
+                    b.Navigation("WorkflowVersion");
+                });
+
+            modelBuilder.Entity("backend.Models.Domain.WorkflowVersion", b =>
+                {
+                    b.HasOne("backend.Modules.Configuration.Models.Workflow", "Workflow")
+                        .WithMany("Versions")
+                        .HasForeignKey("WorkflowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Workflow");
+                });
+
+            modelBuilder.Entity("backend.Modules.Billing.Models.Subscription", b =>
+                {
+                    b.HasOne("backend.Modules.Billing.Models.Plan", "Plan")
                         .WithMany("Subscriptions")
                         .HasForeignKey("PlanId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -2152,7 +2159,7 @@ namespace backend.Migrations.Modular
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("backend.Models.Domain.UsageRecord", b =>
+            modelBuilder.Entity("backend.Modules.Billing.Models.UsageRecord", b =>
                 {
                     b.HasOne("backend.Models.Domain.CallSession", "CallSession")
                         .WithMany("UsageRecords")
@@ -2184,7 +2191,29 @@ namespace backend.Migrations.Modular
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("backend.Models.Domain.Workflow", b =>
+            modelBuilder.Entity("backend.Modules.Configuration.Models.KnowledgeBase", b =>
+                {
+                    b.HasOne("backend.Modules.Identity.Models.User", "User")
+                        .WithMany("KnowledgeBases")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("backend.Modules.Configuration.Models.Persona", b =>
+                {
+                    b.HasOne("backend.Modules.Identity.Models.User", "User")
+                        .WithMany("Personas")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("backend.Modules.Configuration.Models.Workflow", b =>
                 {
                     b.HasOne("backend.Modules.Identity.Models.User", "User")
                         .WithMany("Workflows")
@@ -2193,35 +2222,6 @@ namespace backend.Migrations.Modular
                         .IsRequired();
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("backend.Models.Domain.WorkflowExecution", b =>
-                {
-                    b.HasOne("backend.Models.Domain.CallSession", "CallSession")
-                        .WithMany("WorkflowExecutions")
-                        .HasForeignKey("CallSessionId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("backend.Models.Domain.WorkflowVersion", "WorkflowVersion")
-                        .WithMany()
-                        .HasForeignKey("WorkflowVersionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("CallSession");
-
-                    b.Navigation("WorkflowVersion");
-                });
-
-            modelBuilder.Entity("backend.Models.Domain.WorkflowVersion", b =>
-                {
-                    b.HasOne("backend.Models.Domain.Workflow", "Workflow")
-                        .WithMany("Versions")
-                        .HasForeignKey("WorkflowId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Workflow");
                 });
 
             modelBuilder.Entity("backend.Modules.Identity.Models.ApiKey", b =>
@@ -2326,7 +2326,7 @@ namespace backend.Migrations.Modular
 
             modelBuilder.Entity("backend.Modules.Identity.Models.User", b =>
                 {
-                    b.HasOne("backend.Models.Domain.Persona", "DefaultPersona")
+                    b.HasOne("backend.Modules.Configuration.Models.Persona", "DefaultPersona")
                         .WithMany()
                         .HasForeignKey("DefaultPersonaId")
                         .OnDelete(DeleteBehavior.SetNull);
@@ -2387,19 +2387,24 @@ namespace backend.Migrations.Modular
                     b.Navigation("Sessions");
                 });
 
-            modelBuilder.Entity("backend.Models.Domain.KnowledgeBase", b =>
+            modelBuilder.Entity("backend.Models.Domain.KnowledgeDocument", b =>
+                {
+                    b.Navigation("Chunks");
+                });
+
+            modelBuilder.Entity("backend.Modules.Billing.Models.Plan", b =>
+                {
+                    b.Navigation("Subscriptions");
+                });
+
+            modelBuilder.Entity("backend.Modules.Configuration.Models.KnowledgeBase", b =>
                 {
                     b.Navigation("Documents");
 
                     b.Navigation("PersonaKnowledgeBases");
                 });
 
-            modelBuilder.Entity("backend.Models.Domain.KnowledgeDocument", b =>
-                {
-                    b.Navigation("Chunks");
-                });
-
-            modelBuilder.Entity("backend.Models.Domain.Persona", b =>
+            modelBuilder.Entity("backend.Modules.Configuration.Models.Persona", b =>
                 {
                     b.Navigation("PersonaActions");
 
@@ -2408,12 +2413,7 @@ namespace backend.Migrations.Modular
                     b.Navigation("Versions");
                 });
 
-            modelBuilder.Entity("backend.Models.Domain.Plan", b =>
-                {
-                    b.Navigation("Subscriptions");
-                });
-
-            modelBuilder.Entity("backend.Models.Domain.Workflow", b =>
+            modelBuilder.Entity("backend.Modules.Configuration.Models.Workflow", b =>
                 {
                     b.Navigation("Versions");
                 });

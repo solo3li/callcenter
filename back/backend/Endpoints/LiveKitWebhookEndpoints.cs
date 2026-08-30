@@ -1,6 +1,10 @@
 using System.Text.Json;
+using MediatR;
 using backend.Middleware;
 using backend.Services;
+using backend.Modules.CallOperations.Features.CallRouting.HandleParticipantJoined;
+using backend.Modules.CallOperations.Features.CallRouting.HandleParticipantLeft;
+using backend.Modules.CallOperations.Features.CallRouting.HandleRoomFinished;
 
 namespace backend.Endpoints
 {
@@ -10,7 +14,7 @@ namespace backend.Endpoints
         {
             app.MapPost("/api/webhooks/livekit", async (
                 HttpRequest request, LiveKitService liveKit,
-                InboundRoutingService routing) =>
+                IMediator mediator) =>
             {
                 if (!ServiceAuth.IsConfiguredOrValid(request.HttpContext))
                     return Results.Unauthorized();
@@ -39,15 +43,15 @@ namespace backend.Endpoints
                 {
                     case "participant_joined":
                         if (roomName != null && identity != null)
-                            await routing.HandleParticipantJoinedAsync(roomName, identity);
+                            await mediator.Send(new HandleParticipantJoinedCommand(roomName, identity));
                         break;
                     case "participant_left":
                         if (roomName != null && identity != null)
-                            await routing.HandleParticipantLeftAsync(roomName, identity);
+                            await mediator.Send(new HandleParticipantLeftCommand(roomName, identity));
                         break;
                     case "room_finished":
                         if (roomName != null)
-                            await routing.HandleRoomFinishedAsync(roomName);
+                            await mediator.Send(new HandleRoomFinishedCommand(roomName));
                         break;
                 }
 

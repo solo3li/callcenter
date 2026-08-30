@@ -1,0 +1,46 @@
+using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using MediatR;
+using backend.Data;
+using backend.Dtos;
+
+namespace backend.Modules.CallOperations.Features.HumanAgents.GetHumanAgentCurrentSession;
+
+public record GetHumanAgentCurrentSessionQuery(Guid HumanAgentId, Guid OwnerUserId) : IRequest<AgentSessionDto?>;
+
+public class GetHumanAgentCurrentSessionQueryHandler : IRequestHandler<GetHumanAgentCurrentSessionQuery, AgentSessionDto?>
+{
+    private readonly AppDbContext _db;
+
+    public GetHumanAgentCurrentSessionQueryHandler(AppDbContext db)
+    {
+        _db = db;
+    }
+
+    public async Task<AgentSessionDto?> Handle(GetHumanAgentCurrentSessionQuery request, CancellationToken cancellationToken)
+    {
+        var agent = await _db.HumanAgents
+            .FirstOrDefaultAsync(a => a.Id == request.HumanAgentId && a.OwnerUserId == request.OwnerUserId && a.IsActive, cancellationToken);
+
+        if (agent is null)
+            return null;
+
+        return await _db.HumanAgentSessions
+            .Where(s => s.HumanAgentId == request.HumanAgentId && s.Status == "active")
+            .OrderByDescending(s => s.ConnectedAt)
+            .Select(s => new AgentSessionDto(
+                s.Id,
+                s.HumanAgentId,
+                s.LivekitIdentity,
+                s.Status,
+                s.ConnectedAt,
+                s.DisconnectedAt,
+                s.LastHeartbeatAt,
+                s.MetadataJson
+            ))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+}

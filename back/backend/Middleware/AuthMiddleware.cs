@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using backend.Services;
+using backend.Modules.Identity.Services;
 
 namespace backend.Middleware
 {
@@ -23,7 +24,7 @@ namespace backend.Middleware
             _next = next;
         }
 
-        public async Task InvokeAsync(HttpContext context, AuthService authService, ApiKeyService apiKeyService)
+        public async Task InvokeAsync(HttpContext context, TokenService tokenService, ApiKeyValidationService apiKeyService)
         {
             var path = context.Request.Path.Value?.ToLowerInvariant() ?? string.Empty;
 
@@ -72,7 +73,7 @@ namespace backend.Middleware
             if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             {
                 var token = authHeader["Bearer ".Length..].Trim();
-                var userId = await authService.ValidateTokenAsync(token);
+                var userId = tokenService.ValidateToken(token);
                 if (userId.HasValue)
                 {
                     context.Items["UserId"] = userId.Value;

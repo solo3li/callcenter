@@ -1,7 +1,14 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using MediatR;
 using backend.Dtos;
-using backend.Services;
+using backend.Modules.CallOperations.Features.CallSessions.ListCallSessions;
+using backend.Modules.CallOperations.Features.CallSessions.GetCallSession;
+using backend.Modules.CallOperations.Features.CallSessions.GetActiveCalls;
+using backend.Modules.CallOperations.Features.CallSessions.EndCallSession;
+using backend.Modules.CallOperations.Features.CallSessions.UpdateCallSessionMetadata;
+using backend.Modules.CallOperations.Features.CallSessions.ListCallParticipants;
+using backend.Modules.CallOperations.Features.CallSessions.GetCallParticipant;
 
 namespace backend.Endpoints
 {
@@ -18,72 +25,72 @@ namespace backend.Endpoints
                 DateTime? to,
                 int page = 1,
                 int limit = 20,
-                CallSessionService service = null!,
+                IMediator mediator = null!,
                 HttpContext http = null!) =>
             {
                 var userId = (Guid)http.Items["UserId"]!;
-                var (items, totalCount) = await service.ListAsync(userId, status, direction, from, to, page, limit);
+                var (items, totalCount) = await mediator.Send(new ListCallSessionsQuery(userId, status, direction, from, to, page, limit));
                 return Results.Ok(new { items, totalCount, page, limit });
             });
 
             group.MapGet("/{id:guid}", async (
                 Guid id,
-                CallSessionService service,
+                IMediator mediator,
                 HttpContext http) =>
             {
                 var userId = (Guid)http.Items["UserId"]!;
-                var result = await service.GetByIdAsync(id, userId);
+                var result = await mediator.Send(new GetCallSessionQuery(id, userId));
                 return result is not null ? Results.Ok(result) : Results.NotFound();
             });
 
             group.MapGet("/active", async (
-                CallSessionService service,
+                IMediator mediator,
                 HttpContext http) =>
             {
                 var userId = (Guid)http.Items["UserId"]!;
-                var result = await service.GetActiveAsync(userId);
+                var result = await mediator.Send(new GetActiveCallsQuery(userId));
                 return Results.Ok(result);
             });
 
             group.MapPost("/{id:guid}/end", async (
                 Guid id,
-                CallSessionService service,
+                IMediator mediator,
                 HttpContext http) =>
             {
                 var userId = (Guid)http.Items["UserId"]!;
-                var result = await service.EndCallAsync(id, userId);
+                var result = await mediator.Send(new EndCallSessionCommand(id, userId));
                 return result is not null ? Results.Ok(result) : Results.NotFound();
             });
 
             group.MapPatch("/{id:guid}/metadata", async (
                 Guid id,
                 [FromBody] UpdateMetadataRequest request,
-                CallSessionService service,
+                IMediator mediator,
                 HttpContext http) =>
             {
                 var userId = (Guid)http.Items["UserId"]!;
-                var updated = await service.UpdateMetadataAsync(id, userId, request.MetadataJson);
+                var updated = await mediator.Send(new UpdateCallSessionMetadataCommand(id, userId, request.MetadataJson));
                 return updated ? Results.Ok() : Results.NotFound();
             });
 
             group.MapGet("/{id:guid}/participants", async (
                 Guid id,
-                CallSessionService service,
+                IMediator mediator,
                 HttpContext http) =>
             {
                 var userId = (Guid)http.Items["UserId"]!;
-                var result = await service.GetParticipantsAsync(id, userId);
+                var result = await mediator.Send(new ListCallParticipantsQuery(id, userId));
                 return Results.Ok(result);
             });
 
             group.MapGet("/{id:guid}/participants/{pid:guid}", async (
                 Guid id,
                 Guid pid,
-                CallSessionService service,
+                IMediator mediator,
                 HttpContext http) =>
             {
                 var userId = (Guid)http.Items["UserId"]!;
-                var result = await service.GetParticipantByIdAsync(id, pid, userId);
+                var result = await mediator.Send(new GetCallParticipantQuery(id, pid, userId));
                 return result is not null ? Results.Ok(result) : Results.NotFound();
             });
         }

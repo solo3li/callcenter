@@ -1,7 +1,11 @@
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using MediatR;
 using backend.Dtos;
-using backend.Services;
+using backend.Modules.CallOperations.Features.CallHandoffs.ListCallHandoffs;
+using backend.Modules.CallOperations.Features.CallHandoffs.GetCallHandoff;
+using backend.Modules.CallOperations.Features.CallHandoffs.CreateCallHandoff;
+using backend.Modules.CallOperations.Features.CallHandoffs.DeliverCallHandoff;
+using backend.Modules.CallOperations.Features.CallHandoffs.AcceptCallHandoff;
 
 namespace backend.Endpoints
 {
@@ -13,18 +17,18 @@ namespace backend.Endpoints
 
             group.MapGet("/", async (
                 Guid callSessionId,
-                CallHandoffService service) =>
+                IMediator mediator) =>
             {
-                var result = await service.ListForCallAsync(callSessionId);
+                var result = await mediator.Send(new ListCallHandoffsQuery(callSessionId));
                 return Results.Ok(result);
             });
 
             group.MapGet("/{handoffId:guid}", async (
                 Guid callSessionId,
                 Guid handoffId,
-                CallHandoffService service) =>
+                IMediator mediator) =>
             {
-                var result = await service.GetByIdAsync(handoffId);
+                var result = await mediator.Send(new GetCallHandoffQuery(handoffId));
                 return result is not null ? Results.Ok(result) : Results.NotFound();
             });
 
@@ -32,31 +36,31 @@ namespace backend.Endpoints
                 Guid callSessionId,
                 Guid transferId,
                 [FromBody] CreateHandoffRequest request,
-                CallHandoffService service) =>
+                IMediator mediator) =>
             {
-                var result = await service.CreateContextAsync(
+                var result = await mediator.Send(new CreateCallHandoffCommand(
                     transferId,
                     request.Summary,
                     request.ContextDataJson,
-                    request.Reason);
+                    request.Reason));
                 return result is not null ? Results.Ok(result) : Results.NotFound();
             });
 
             group.MapPost("/{handoffId:guid}/deliver", async (
                 Guid callSessionId,
                 Guid handoffId,
-                CallHandoffService service) =>
+                IMediator mediator) =>
             {
-                var result = await service.DeliverAsync(handoffId);
+                var result = await mediator.Send(new DeliverCallHandoffCommand(handoffId));
                 return result is not null ? Results.Ok(result) : Results.NotFound();
             });
 
             group.MapPost("/{handoffId:guid}/accept", async (
                 Guid callSessionId,
                 Guid handoffId,
-                CallHandoffService service) =>
+                IMediator mediator) =>
             {
-                var result = await service.AcceptAsync(handoffId);
+                var result = await mediator.Send(new AcceptCallHandoffCommand(handoffId));
                 return result is not null ? Results.Ok(result) : Results.NotFound();
             });
         }

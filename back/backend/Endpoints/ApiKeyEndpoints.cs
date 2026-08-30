@@ -3,8 +3,12 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using MediatR;
 using backend.Dtos;
-using backend.Services;
+using backend.Modules.Identity.Features.ApiKeys.GetApiKeys;
+using backend.Modules.Identity.Features.ApiKeys.CreateApiKey;
+using backend.Modules.Identity.Features.ApiKeys.RevokeApiKey;
+using backend.Modules.Identity.Features.ApiKeys.UpdateApiKeyScopes;
 
 namespace backend.Endpoints
 {
@@ -12,44 +16,32 @@ namespace backend.Endpoints
     {
         public static WebApplication MapApiKeyEndpoints(this WebApplication app)
         {
-            app.MapGet("/api/api-keys", async (HttpContext context, ApiKeyService apiKeyService) =>
+            app.MapGet("/api/api-keys", async (HttpContext context, IMediator mediator) =>
             {
                 if (!context.Items.TryGetValue("UserId", out var userIdObj) || userIdObj is not Guid userId)
                     return Results.Unauthorized();
 
-                var keys = await apiKeyService.ListAsync(userId);
-                var dtos = keys.Select(k => new ApiKeyListItem(
-                    k.Id,
-                    k.Name,
-                    k.KeyPrefix,
-                    k.Status.ToString(),
-                    k.Scopes,
-                    k.LastUsedAt,
-                    k.ExpiresAt,
-                    k.CreatedAt
-                ));
-
+                var dtos = await mediator.Send(new GetApiKeysQuery(userId));
                 return Results.Ok(dtos);
             });
 
-            app.MapPost("/api/api-keys", async (CreateApiKeyRequest request, HttpContext context, ApiKeyService apiKeyService) =>
+            app.MapPost("/api/api-keys", async (CreateApiKeyRequest request, HttpContext context, IMediator mediator) =>
             {
                 if (!context.Items.TryGetValue("UserId", out var userIdObj) || userIdObj is not Guid userId)
                     return Results.Unauthorized();
 
-                var (apiKey, rawKey) = await apiKeyService.CreateAsync(userId, request);
-                var response = new CreateApiKeyResponse(apiKey.Id, apiKey.Name, rawKey, apiKey.KeyPrefix, apiKey.CreatedAt);
+                var response = await mediator.Send(new CreateApiKeyCommand(userId, request));
                 return Results.Ok(response);
             });
 
-            app.MapDelete("/api/api-keys/{id:guid}", async (Guid id, HttpContext context, ApiKeyService apiKeyService) =>
+            app.MapDelete("/api/api-keys/{id:guid}", async (Guid id, HttpContext context, IMediator mediator) =>
             {
                 if (!context.Items.TryGetValue("UserId", out var userIdObj) || userIdObj is not Guid userId)
                     return Results.Unauthorized();
 
                 try
                 {
-                    await apiKeyService.RevokeAsync(id, userId);
+                    await mediator.Send(new RevokeApiKeyCommand(id, userId));
                     return Results.Ok(new { message = "API key revoked" });
                 }
                 catch (InvalidOperationException)
@@ -58,14 +50,14 @@ namespace backend.Endpoints
                 }
             });
 
-            app.MapPatch("/api/api-keys/{id:guid}/scopes", async (Guid id, UpdateApiKeyScopesRequest request, HttpContext context, ApiKeyService apiKeyService) =>
+            app.MapPatch("/api/api-keys/{id:guid}/scopes", async (Guid id, UpdateApiKeyScopesRequest request, HttpContext context, IMediator mediator) =>
             {
                 if (!context.Items.TryGetValue("UserId", out var userIdObj) || userIdObj is not Guid userId)
                     return Results.Unauthorized();
 
                 try
                 {
-                    await apiKeyService.UpdateScopesAsync(id, userId, request.Scopes);
+                    await mediator.Send(new UpdateApiKeyScopesCommand(id, userId, request.Scopes));
                     return Results.Ok(new { message = "Scopes updated" });
                 }
                 catch (InvalidOperationException)

@@ -1,4 +1,5 @@
 using System;
+using backend.Modules.Billing.Models;
 using System.Collections.Generic;
 using backend.Models.Enums;
 

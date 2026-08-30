@@ -1,129 +1,80 @@
 using System.Text.Json;
+using MediatR;
 using backend.Data;
 using backend.Middleware;
 using backend.Models.Domain;
 using backend.Models.Enums;
+using backend.Modules.CallOperations.Features.SipDestinations.ListSipDestinations;
+using backend.Modules.CallOperations.Features.SipDestinations.CreateSipDestination;
+using backend.Modules.CallOperations.Features.SipDestinations.UpdateSipDestination;
+using backend.Modules.CallOperations.Features.SipDestinations.DeleteSipDestination;
+using backend.Modules.CallOperations.Features.SipDestinations.GetTransferOptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace backend.Endpoints;
 
 public static class SipDestinationEndpoints
 {
-    public sealed record CreateSipDestinationRequest(string Name, string CallTo, string? Description);
-    public sealed record UpdateSipDestinationRequest(string? Name, string? CallTo, string? Description, bool? IsEnabled);
-
     public static WebApplication MapSipDestinationEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/sip/destinations");
 
-        group.MapGet("/", async (AppDbContext db, HttpContext http) =>
+        group.MapGet("/", async (IMediator mediator, HttpContext http) =>
         {
             var userId = (Guid)http.Items["UserId"]!;
-            var items = await db.SipDestinations
-                .Where(d => d.UserId == userId)
-                .OrderBy(d => d.Name)
-                .Select(d => new
-                {
-                    d.Id,
-                    d.Name,
-                    d.Description,
-                    d.CallTo,
-                    d.IsEnabled,
-                    d.CreatedAt,
-                    d.UpdatedAt
-                })
-                .ToListAsync();
+            var items = await mediator.Send(new ListSipDestinationsQuery(userId));
             return Results.Ok(items);
         });
 
-        group.MapPost("/", async (CreateSipDestinationRequest req, AppDbContext db, HttpContext http) =>
+        group.MapPost("/", async (CreateSipDestinationRequest req, IMediator mediator, HttpContext http) =>
         {
             var userId = (Guid)http.Items["UserId"]!;
-            if (string.IsNullOrWhiteSpace(req.Name) || string.IsNullOrWhiteSpace(req.CallTo))
-                return Results.BadRequest(new { error = "Name and CallTo are required" });
-
-            var exists = await db.SipDestinations
-                .AnyAsync(d => d.UserId == userId && d.Name.ToLower() == req.Name.Trim().ToLower());
-            if (exists)
-                return Results.Conflict(new { error = $"Destination '{req.Name}' already exists" });
-
-            var destination = new SipDestination
+            try 
             {
-                UserId = userId,
-                Name = req.Name.Trim(),
-                Description = req.Description?.Trim(),
-                CallTo = req.CallTo.Trim()
-            };
-            db.SipDestinations.Add(destination);
-            await db.SaveChangesAsync();
-            return Results.Created($"/api/sip/destinations/{destination.Id}", new
+                var destination = await mediator.Send(new CreateSipDestinationCommand(userId, req));
+                return Results.Created($"/api/sip/destinations/{destination.Id}", destination);
+            }
+            catch (InvalidOperationException ex)
             {
-                destination.Id,
-                destination.Name,
-                destination.Description,
-                destination.CallTo,
-                destination.IsEnabled
-            });
+                if (ex.Message.Contains("already exists"))
+                    return Results.Conflict(new { error = ex.Message });
+                return Results.BadRequest(new { error = ex.Message });
+            }
         });
 
         group.MapPatch("/{id:guid}", async (Guid id, UpdateSipDestinationRequest req,
-            AppDbContext db, HttpContext http) =>
+            IMediator mediator, HttpContext http) =>
         {
             var userId = (Guid)http.Items["UserId"]!;
-            var destination = await db.SipDestinations
-                .FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId);
-            if (destination == null) return Results.NotFound();
-
-            if (req.Name != null)
+            try
             {
-                var clash = await db.SipDestinations.AnyAsync(d =>
-                    d.UserId == userId && d.Id != id &&
-                    d.Name.ToLower() == req.Name.Trim().ToLower());
-                if (clash) return Results.Conflict(new { error = "Name already in use" });
-                destination.Name = req.Name.Trim();
+                var destination = await mediator.Send(new UpdateSipDestinationCommand(id, userId, req));
+                if (destination == null) return Results.NotFound();
+                return Results.Ok(destination);
             }
-            if (req.CallTo != null) destination.CallTo = req.CallTo.Trim();
-            if (req.Description != null) destination.Description = req.Description.Trim();
-            if (req.IsEnabled.HasValue) destination.IsEnabled = req.IsEnabled.Value;
-            destination.UpdatedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync();
-
-            return Results.Ok(new
+            catch (InvalidOperationException ex)
             {
-                destination.Id,
-                destination.Name,
-                destination.Description,
-                destination.CallTo,
-                destination.IsEnabled
-            });
+                return Results.Conflict(new { error = ex.Message });
+            }
         });
 
-        group.MapDelete("/{id:guid}", async (Guid id, AppDbContext db, HttpContext http) =>
+        group.MapDelete("/{id:guid}", async (Guid id, IMediator mediator, HttpContext http) =>
         {
             var userId = (Guid)http.Items["UserId"]!;
-            var destination = await db.SipDestinations
-                .FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId);
-            if (destination == null) return Results.NotFound();
-            db.SipDestinations.Remove(destination);
-            await db.SaveChangesAsync();
+            var deleted = await mediator.Send(new DeleteSipDestinationCommand(id, userId));
+            if (!deleted) return Results.NotFound();
             return Results.NoContent();
         });
 
         // ── transfer options for the AI layer (names only, never CallTo) ──
-        group.MapGet("/options", async (AppDbContext db, HttpContext http) =>
+        group.MapGet("/options", async (IMediator mediator, HttpContext http) =>
         {
             var userId = (Guid)http.Items["UserId"]!;
-            var agents = await db.HumanAgents
-                .Where(a => a.OwnerUserId == userId && a.IsActive)
-                .Select(a => new { type = "human", name = a.Name, available = a.Status == HumanAgentStatus.Available })
-                .ToListAsync();
-            var destinations = await db.SipDestinations
-                .Where(d => d.UserId == userId && d.IsEnabled)
-                .Select(d => new { type = "destination", name = d.Name, available = true })
-                .ToListAsync();
-            return Results.Ok(new { agents, destinations });
+            var result = await mediator.Send(new GetTransferOptionsQuery(userId));
+            return Results.Ok(new { agents = result.Agents, destinations = result.Destinations });
         });
 
         return app;
     }
 }
+

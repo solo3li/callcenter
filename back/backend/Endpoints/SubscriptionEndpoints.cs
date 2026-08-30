@@ -1,8 +1,13 @@
 using System;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using MediatR;
 using backend.Dtos;
-using backend.Services;
+using backend.Modules.Billing.Features.Subscriptions.ListSubscriptions;
+using backend.Modules.Billing.Features.Subscriptions.GetSubscription;
+using backend.Modules.Billing.Features.Subscriptions.CreateSubscription;
+using backend.Modules.Billing.Features.Subscriptions.UpdateSubscription;
+using backend.Modules.Billing.Features.Subscriptions.CancelSubscription;
 
 namespace backend.Endpoints
 {
@@ -10,30 +15,30 @@ namespace backend.Endpoints
     {
         public static WebApplication MapSubscriptionEndpoints(this WebApplication app)
         {
-            app.MapGet("/api/subscriptions", async (HttpContext context, SubscriptionService service) =>
+            app.MapGet("/api/subscriptions", async (HttpContext context, IMediator mediator) =>
             {
                 if (!context.Items.TryGetValue("UserId", out var userIdObj) || userIdObj is not Guid userId)
                     return Results.Unauthorized();
 
-                var subs = await service.ListAsync(userId);
+                var subs = await mediator.Send(new ListSubscriptionsQuery(userId));
                 return Results.Ok(subs);
             });
 
-            app.MapGet("/api/subscriptions/{id:guid}", async (Guid id, SubscriptionService service) =>
+            app.MapGet("/api/subscriptions/{id:guid}", async (Guid id, IMediator mediator) =>
             {
-                var sub = await service.GetByIdAsync(id);
+                var sub = await mediator.Send(new GetSubscriptionQuery(id));
                 return sub == null ? Results.NotFound() : Results.Ok(sub);
             });
 
             app.MapPost("/api/subscriptions", async (HttpContext context,
-                CreateSubscriptionRequest request, SubscriptionService service) =>
+                CreateSubscriptionRequest request, IMediator mediator) =>
             {
                 if (!context.Items.TryGetValue("UserId", out var userIdObj) || userIdObj is not Guid userId)
                     return Results.Unauthorized();
 
                 try
                 {
-                    var sub = await service.CreateAsync(userId, request);
+                    var sub = await mediator.Send(new CreateSubscriptionCommand(userId, request));
                     return Results.Created($"/api/subscriptions/{sub.Id}", sub);
                 }
                 catch (ArgumentException ex)
@@ -43,16 +48,15 @@ namespace backend.Endpoints
             });
 
             app.MapPut("/api/subscriptions/{id:guid}", async (Guid id,
-                UpdateSubscriptionRequest request, SubscriptionService service) =>
+                UpdateSubscriptionRequest request, IMediator mediator) =>
             {
-                var sub = await service.UpdateAsync(id, request);
+                var sub = await mediator.Send(new UpdateSubscriptionCommand(id, request));
                 return sub == null ? Results.NotFound() : Results.Ok(sub);
             });
 
-            app.MapPost("/api/subscriptions/{id:guid}/cancel", async (Guid id,
-                SubscriptionService service) =>
+            app.MapPost("/api/subscriptions/{id:guid}/cancel", async (Guid id, IMediator mediator) =>
             {
-                var cancelled = await service.CancelAsync(id);
+                var cancelled = await mediator.Send(new CancelSubscriptionCommand(id));
                 return cancelled ? Results.Ok(new { message = "Subscription cancelled" }) : Results.NotFound();
             });
 

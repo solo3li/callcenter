@@ -1,4 +1,5 @@
 using System;
+using backend.Modules.Configuration.Models;
 using System.Collections.Generic;
 
 namespace backend.Models.Domain;
