@@ -76,7 +76,8 @@ public static class DbPatchRunner
                 using var stream = asm.GetManifestResourceStream(n)!;
                 using var reader = new StreamReader(stream);
                 var content = reader.ReadToEnd();
-                var name = n.Substring(n.LastIndexOf('.') + 1);
+                var parts = n.Split('.');
+                var name = parts.Length >= 2 ? $"{parts[^2]}.{parts[^1]}" : n;
                 return (Name: name, Sql: content);
             })
             .ToArray();

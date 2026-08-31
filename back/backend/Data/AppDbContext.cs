@@ -57,24 +57,24 @@ public class AppDbContext : DbContext
         base.OnModelCreating(modelBuilder);
 
         // ── PostgreSQL Enums ───────────────────────────────────────────
-        modelBuilder.HasPostgresEnum<UserStatus>();
-        modelBuilder.HasPostgresEnum<PartnerRelationshipStatus>();
-        modelBuilder.HasPostgresEnum<ApiKeyStatus>();
-        modelBuilder.HasPostgresEnum<HumanAgentStatus>();
-        modelBuilder.HasPostgresEnum<AccessKeyStatus>();
-        modelBuilder.HasPostgresEnum<CallSessionStatus>();
-        modelBuilder.HasPostgresEnum<CallDirection>();
-        modelBuilder.HasPostgresEnum<ParticipantType>();
-        modelBuilder.HasPostgresEnum<CallTransferStatus>();
-        modelBuilder.HasPostgresEnum<HandoffStatus>();
-        modelBuilder.HasPostgresEnum<LicenseStatus>();
-        modelBuilder.HasPostgresEnum<PlanTier>();
-        modelBuilder.HasPostgresEnum<RecordingStatus>();
-        modelBuilder.HasPostgresEnum<MetricType>();
-        modelBuilder.HasPostgresEnum<ActionType>();
-        modelBuilder.HasPostgresEnum<ActionExecutionStatus>();
-        modelBuilder.HasPostgresEnum<WorkflowExecutionStatus>();
-        modelBuilder.HasPostgresEnum<SubscriptionStatus>();
+        modelBuilder.HasPostgresEnum<UserStatus>("user_status");
+        modelBuilder.HasPostgresEnum<PartnerRelationshipStatus>("partner_relationship_status");
+        modelBuilder.HasPostgresEnum<ApiKeyStatus>("api_key_status");
+        modelBuilder.HasPostgresEnum<HumanAgentStatus>("human_agent_status");
+        modelBuilder.HasPostgresEnum<AccessKeyStatus>("access_key_status");
+        modelBuilder.HasPostgresEnum<CallSessionStatus>("call_session_status");
+        modelBuilder.HasPostgresEnum<CallDirection>("call_direction");
+        modelBuilder.HasPostgresEnum<ParticipantType>("participant_type");
+        modelBuilder.HasPostgresEnum<CallTransferStatus>("call_transfer_status");
+        modelBuilder.HasPostgresEnum<HandoffStatus>("handoff_status");
+        modelBuilder.HasPostgresEnum<LicenseStatus>("license_status");
+        modelBuilder.HasPostgresEnum<PlanTier>("plan_tier");
+        modelBuilder.HasPostgresEnum<RecordingStatus>("recording_status");
+        modelBuilder.HasPostgresEnum<MetricType>("metric_type");
+        modelBuilder.HasPostgresEnum<ActionType>("action_type");
+        modelBuilder.HasPostgresEnum<ActionExecutionStatus>("action_execution_status");
+        modelBuilder.HasPostgresEnum<WorkflowExecutionStatus>("workflow_execution_status");
+        modelBuilder.HasPostgresEnum<SubscriptionStatus>("subscription_status");
 
         // ── Legacy Tables (keep existing names/compat) ─────────────────
         modelBuilder.Entity<AgentUser>(entity =>

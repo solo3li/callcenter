@@ -66,11 +66,54 @@ builder.Services.AddCors(options => {
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "Host=db;Port=5432;Database=callcenter;Username=admin;Password=adminpassword";
 
+var translator = new Npgsql.NameTranslation.NpgsqlSnakeCaseNameTranslator();
+#pragma warning disable CS0618
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.UserStatus>("user_status", translator);
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.PartnerRelationshipStatus>("partner_relationship_status", translator);
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.ApiKeyStatus>("api_key_status", translator);
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.HumanAgentStatus>("human_agent_status", translator);
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.AccessKeyStatus>("access_key_status", translator);
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.CallSessionStatus>("call_session_status", translator);
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.CallDirection>("call_direction", translator);
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.ParticipantType>("participant_type", translator);
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.CallTransferStatus>("call_transfer_status", translator);
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.HandoffStatus>("handoff_status", translator);
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.LicenseStatus>("license_status", translator);
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.PlanTier>("plan_tier", translator);
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.RecordingStatus>("recording_status", translator);
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.MetricType>("metric_type", translator);
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.ActionType>("action_type", translator);
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.ActionExecutionStatus>("action_execution_status", translator);
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.WorkflowExecutionStatus>("workflow_execution_status", translator);
+NpgsqlConnection.GlobalTypeMapper.MapEnum<backend.Models.Enums.SubscriptionStatus>("subscription_status", translator);
+#pragma warning restore CS0618
+
+var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+dataSourceBuilder.MapEnum<backend.Models.Enums.UserStatus>("user_status", translator);
+dataSourceBuilder.MapEnum<backend.Models.Enums.PartnerRelationshipStatus>("partner_relationship_status", translator);
+dataSourceBuilder.MapEnum<backend.Models.Enums.ApiKeyStatus>("api_key_status", translator);
+dataSourceBuilder.MapEnum<backend.Models.Enums.HumanAgentStatus>("human_agent_status", translator);
+dataSourceBuilder.MapEnum<backend.Models.Enums.AccessKeyStatus>("access_key_status", translator);
+dataSourceBuilder.MapEnum<backend.Models.Enums.CallSessionStatus>("call_session_status", translator);
+dataSourceBuilder.MapEnum<backend.Models.Enums.CallDirection>("call_direction", translator);
+dataSourceBuilder.MapEnum<backend.Models.Enums.ParticipantType>("participant_type", translator);
+dataSourceBuilder.MapEnum<backend.Models.Enums.CallTransferStatus>("call_transfer_status", translator);
+dataSourceBuilder.MapEnum<backend.Models.Enums.HandoffStatus>("handoff_status", translator);
+dataSourceBuilder.MapEnum<backend.Models.Enums.LicenseStatus>("license_status", translator);
+dataSourceBuilder.MapEnum<backend.Models.Enums.PlanTier>("plan_tier", translator);
+dataSourceBuilder.MapEnum<backend.Models.Enums.RecordingStatus>("recording_status", translator);
+dataSourceBuilder.MapEnum<backend.Models.Enums.MetricType>("metric_type", translator);
+dataSourceBuilder.MapEnum<backend.Models.Enums.ActionType>("action_type", translator);
+dataSourceBuilder.MapEnum<backend.Models.Enums.ActionExecutionStatus>("action_execution_status", translator);
+dataSourceBuilder.MapEnum<backend.Models.Enums.WorkflowExecutionStatus>("workflow_execution_status", translator);
+dataSourceBuilder.MapEnum<backend.Models.Enums.SubscriptionStatus>("subscription_status", translator);
+var dataSource = dataSourceBuilder.Build();
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString, npgsqlOptions => {
+    options.UseNpgsql(dataSource, npgsqlOptions => {
         npgsqlOptions.UseVector();
         npgsqlOptions.EnableRetryOnFailure(3);
-    }));
+    }).UseSnakeCaseNamingConvention());
 
 builder.Services.AddSignalR();
 
@@ -190,19 +233,19 @@ app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "AI Calling 
 
 app.UseHangfireDashboard("/hangfire");
 
-RecurringJob.AddOrUpdate<QueueBroadcaster>(
-    "broadcast-queue-stats",
-    j => j.BroadcastAsync(),
-    "*/3 * * * * *",
-    new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc }
-);
-
-RecurringJob.AddOrUpdate<TransferTimeoutProcessor>(
-    "transfer-timeout",
-    j => j.ProcessTimeoutsAsync(),
-    "*/10 * * * * *",
-    new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc }
-);
+// RecurringJob.AddOrUpdate<QueueBroadcaster>(
+//     "broadcast-queue-stats",
+//     j => j.BroadcastAsync(),
+//     "*/3 * * * * *",
+//     new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc }
+// );
+// 
+// RecurringJob.AddOrUpdate<TransferTimeoutProcessor>(
+//     "transfer-timeout",
+//     j => j.ProcessTimeoutsAsync(),
+//     "*/10 * * * * *",
+//     new RecurringJobOptions { TimeZone = TimeZoneInfo.Utc }
+// );
 
 // â”€â”€ Map All Endpoint Groups (136 endpoints) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 app.MapAuthEndpoints();
@@ -228,8 +271,6 @@ app.MapStatsEndpoints();
 app.MapWebhookEndpoints();
 app.MapLiveKitWebhookEndpoints();
 app.MapLegacyShimsEndpoints();
-app.MapLegacyShimsEndpoints();
-
 app.MapHub<CallHub>("/hubs/call");
 
 app.Run("http://0.0.0.0:5000");
