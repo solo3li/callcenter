@@ -65,6 +65,18 @@ $sql = "INSERT INTO call_sessions (id, user_id, status, direction, started_at, c
 $containerExec = "docker compose exec -T db psql -U admin -d callcenter -c ""$sql"""
 Invoke-Expression $containerExec
 
+# Insert dummy human agent
+$humanAgentId = [guid]::NewGuid().ToString()
+$sqlAgent = "INSERT INTO human_agents (id, owner_user_id, name, status, created_at) VALUES ('$humanAgentId', '$userId', 'Test Agent', 'available', NOW());"
+$containerExecAgent = "docker compose exec -T db psql -U admin -d callcenter -c ""$sqlAgent"""
+Invoke-Expression $containerExecAgent
+
+# Insert dummy recording
+$recordingId = [guid]::NewGuid().ToString()
+$sqlRec = "INSERT INTO call_recordings (id, call_session_id, storage_provider, object_key, status, duration_seconds, size_bytes, created_at) VALUES ('$recordingId', '$callSessionId', 's3', 'test.wav', 'completed', 10, 1024, NOW());"
+$containerExecRec = "docker compose exec -T db psql -U admin -d callcenter -c ""$sqlRec"""
+Invoke-Expression $containerExecRec
+
 Write-Host "`n=== CALL SESSIONS ==="
 Write-Host "GET /api/calls"
 $calls = Invoke-Api -Method Get -Endpoint "/api/calls" -AuthToken $token
@@ -107,27 +119,66 @@ $options = Invoke-Api -Method Get -Endpoint "/api/sip/destinations/options" -Aut
 
 
 Write-Host "`n=== TRANSFERS & HANDOFFS ==="
-Write-Host "POST /api/calls/$callSessionId/transfers"
-$transfer = Invoke-Api -Method Post -Endpoint "/api/calls/$callSessionId/transfers" -Body @{
+Write-Host "POST /api/calls/$callSessionId/transfers (destination)"
+$destTransfer = Invoke-Api -Method Post -Endpoint "/api/calls/$callSessionId/transfers" -Body @{
     targetType = "destination"
     targetName = "Test Sip Dest $rand Updated"
-    reason = "User requested transfer"
+    reason = "User requested transfer to dest"
+} -AuthToken $token
+
+Write-Host "POST /api/calls/$callSessionId/transfers (agent)"
+$agentTransfer = Invoke-Api -Method Post -Endpoint "/api/calls/$callSessionId/transfers" -Body @{
+    targetType = "agent"
+    targetName = "Test Agent"
+    reason = "User requested transfer to agent"
 } -AuthToken $token
 
 Write-Host "GET /api/calls/$callSessionId/transfers"
-Invoke-Api -Method Get -Endpoint "/api/calls/$callSessionId/transfers" -AuthToken $token
+$transfersList = Invoke-Api -Method Get -Endpoint "/api/calls/$callSessionId/transfers" -AuthToken $token
 
-$transferId = $transfer.transfer.id
+$transferId = $agentTransfer.transfer.id
 if ($transferId) {
+    Write-Host "GET /api/calls/$callSessionId/transfers/$transferId"
+    Invoke-Api -Method Get -Endpoint "/api/calls/$callSessionId/transfers/$transferId" -AuthToken $token
+
+    Write-Host "POST /api/calls/$callSessionId/transfers/$transferId/accept"
+    Invoke-Api -Method Post -Endpoint "/api/calls/$callSessionId/transfers/$transferId/accept" -Body @{ humanAgentId = $humanAgentId } -AuthToken $token
+
     Write-Host "POST /api/calls/$callSessionId/transfers/$transferId/complete"
     Invoke-Api -Method Post -Endpoint "/api/calls/$callSessionId/transfers/$transferId/complete" -AuthToken $token
+    
+    Write-Host "`n=== HANDOFFS ==="
+    Write-Host "POST /api/calls/$callSessionId/handoffs/$transferId"
+    $handoff = Invoke-Api -Method Post -Endpoint "/api/calls/$callSessionId/handoffs/$transferId" -Body @{ summary = "Test Handoff" } -AuthToken $token
+    $handoffId = $handoff.id
+
+    if ($handoffId) {
+        Write-Host "GET /api/calls/$callSessionId/handoffs/$handoffId"
+        Invoke-Api -Method Get -Endpoint "/api/calls/$callSessionId/handoffs/$handoffId" -AuthToken $token
+
+        Write-Host "POST /api/calls/$callSessionId/handoffs/$handoffId/deliver"
+        Invoke-Api -Method Post -Endpoint "/api/calls/$callSessionId/handoffs/$handoffId/deliver" -AuthToken $token
+
+        Write-Host "POST /api/calls/$callSessionId/handoffs/$handoffId/accept"
+        Invoke-Api -Method Post -Endpoint "/api/calls/$callSessionId/handoffs/$handoffId/accept" -AuthToken $token
+    }
 }
 
 Write-Host "GET /api/calls/$callSessionId/handoffs"
 Invoke-Api -Method Get -Endpoint "/api/calls/$callSessionId/handoffs" -AuthToken $token
 
+Write-Host "`n=== RECORDINGS ==="
 Write-Host "GET /api/calls/$callSessionId/recordings"
 Invoke-Api -Method Get -Endpoint "/api/calls/$callSessionId/recordings" -AuthToken $token
+
+Write-Host "GET /api/calls/$callSessionId/recordings/$recordingId"
+Invoke-Api -Method Get -Endpoint "/api/calls/$callSessionId/recordings/$recordingId" -AuthToken $token
+
+Write-Host "GET /api/calls/$callSessionId/recordings/$recordingId/download"
+Invoke-Api -Method Get -Endpoint "/api/calls/$callSessionId/recordings/$recordingId/download" -AuthToken $token
+
+Write-Host "DELETE /api/calls/$callSessionId/recordings/$recordingId"
+Invoke-Api -Method Delete -Endpoint "/api/calls/$callSessionId/recordings/$recordingId" -AuthToken $token
 
 Write-Host "POST /api/calls/$callSessionId/end"
 Invoke-Api -Method Post -Endpoint "/api/calls/$callSessionId/end" -AuthToken $token
