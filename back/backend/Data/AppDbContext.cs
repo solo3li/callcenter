@@ -12,12 +12,34 @@ public class AppDbContext : DbContext
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
     // Legacy/MVP tables (kept for backward compatibility with existing endpoints)
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<UserStatus>().HaveConversion<LowercaseEnumConverter<UserStatus>>();
+        configurationBuilder.Properties<PartnerRelationshipStatus>().HaveConversion<LowercaseEnumConverter<PartnerRelationshipStatus>>();
+        configurationBuilder.Properties<ApiKeyStatus>().HaveConversion<LowercaseEnumConverter<ApiKeyStatus>>();
+        configurationBuilder.Properties<HumanAgentStatus>().HaveConversion<LowercaseEnumConverter<HumanAgentStatus>>();
+        configurationBuilder.Properties<AccessKeyStatus>().HaveConversion<LowercaseEnumConverter<AccessKeyStatus>>();
+        configurationBuilder.Properties<CallSessionStatus>().HaveConversion<LowercaseEnumConverter<CallSessionStatus>>();
+        configurationBuilder.Properties<CallDirection>().HaveConversion<LowercaseEnumConverter<CallDirection>>();
+        configurationBuilder.Properties<ParticipantType>().HaveConversion<LowercaseEnumConverter<ParticipantType>>();
+        configurationBuilder.Properties<CallTransferStatus>().HaveConversion<LowercaseEnumConverter<CallTransferStatus>>();
+        configurationBuilder.Properties<HandoffStatus>().HaveConversion<LowercaseEnumConverter<HandoffStatus>>();
+        configurationBuilder.Properties<LicenseStatus>().HaveConversion<LowercaseEnumConverter<LicenseStatus>>();
+        configurationBuilder.Properties<PlanTier>().HaveConversion<LowercaseEnumConverter<PlanTier>>();
+        configurationBuilder.Properties<RecordingStatus>().HaveConversion<LowercaseEnumConverter<RecordingStatus>>();
+        configurationBuilder.Properties<MetricType>().HaveConversion<LowercaseEnumConverter<MetricType>>();
+        configurationBuilder.Properties<ActionType>().HaveConversion<LowercaseEnumConverter<ActionType>>();
+        configurationBuilder.Properties<ActionExecutionStatus>().HaveConversion<LowercaseEnumConverter<ActionExecutionStatus>>();
+        configurationBuilder.Properties<WorkflowExecutionStatus>().HaveConversion<LowercaseEnumConverter<WorkflowExecutionStatus>>();
+        configurationBuilder.Properties<SubscriptionStatus>().HaveConversion<LowercaseEnumConverter<SubscriptionStatus>>();
+    }
+    public DbSet<Partner> Partners { get; set; } = null!;
+
     public DbSet<AgentUser> Agents { get; set; } = null!;
     public DbSet<CallRecord> Calls { get; set; } = null!;
 
     // New multi-tenant domain tables
     public DbSet<User> Users { get; set; } = null!;
-    public DbSet<Partner> Partners { get; set; } = null!;
     public DbSet<PartnerRelationship> PartnerRelationships { get; set; } = null!;
     public DbSet<PartnerExternalCustomer> PartnerExternalCustomers { get; set; } = null!;
     public DbSet<PartnerPlan> PartnerPlans { get; set; } = null!;
@@ -108,7 +130,7 @@ public class AppDbContext : DbContext
         // ── USERS ─────────────────────────────────────────────────────
         modelBuilder.Entity<User>(entity =>
         {
-            entity.ToTable("users", "identity");
+            entity.ToTable("users");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Email).IsRequired().HasMaxLength(320);
             entity.Property(e => e.DisplayName).IsRequired().HasMaxLength(256);
@@ -176,7 +198,7 @@ public class AppDbContext : DbContext
         // ── PARTNERS ──────────────────────────────────────────────────
         modelBuilder.Entity<Partner>(entity =>
         {
-            entity.ToTable("partners", "identity");
+            entity.ToTable("partners");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.OrganizationName).IsRequired().HasMaxLength(256);
             entity.Property(e => e.ContactEmail).HasMaxLength(320);
@@ -198,7 +220,7 @@ public class AppDbContext : DbContext
         // ── PARTNER RELATIONSHIPS ─────────────────────────────────────
         modelBuilder.Entity<PartnerRelationship>(entity =>
         {
-            entity.ToTable("partner_relationships", "identity");
+            entity.ToTable("partner_relationships");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Status).IsRequired();
             entity.Property(e => e.MetadataJson).HasColumnType("jsonb");
@@ -224,7 +246,7 @@ public class AppDbContext : DbContext
         // ── PARTNER EXTERNAL CUSTOMERS ────────────────────────────────
         modelBuilder.Entity<PartnerExternalCustomer>(entity =>
         {
-            entity.ToTable("partner_external_customers", "identity");
+            entity.ToTable("partner_external_customers");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ExternalCustomerId).IsRequired().HasMaxLength(256);
             entity.Property(e => e.CreatedAt).HasColumnType("timestamptz");
@@ -246,7 +268,7 @@ public class AppDbContext : DbContext
         // ── API KEYS ──────────────────────────────────────────────────
         modelBuilder.Entity<ApiKey>(entity =>
         {
-            entity.ToTable("api_keys", "identity");
+            entity.ToTable("api_keys");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(256);
             entity.Property(e => e.KeyPrefix).IsRequired().HasMaxLength(16);
@@ -344,7 +366,7 @@ public class AppDbContext : DbContext
         // ── PERSONAS ──────────────────────────────────────────────────
         modelBuilder.Entity<Persona>(entity =>
         {
-            entity.ToTable("personas", "configuration");
+            entity.ToTable("personas");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(256);
             entity.Property(e => e.CreatedAt).HasColumnType("timestamptz");
@@ -400,7 +422,7 @@ public class AppDbContext : DbContext
         // ── WORKFLOWS ─────────────────────────────────────────────────
         modelBuilder.Entity<Workflow>(entity =>
         {
-            entity.ToTable("workflows", "configuration");
+            entity.ToTable("workflows");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(256);
             entity.Property(e => e.CreatedAt).HasColumnType("timestamptz");
@@ -795,7 +817,7 @@ public class AppDbContext : DbContext
         // ── PLANS ─────────────────────────────────────────────────────
         modelBuilder.Entity<Plan>(entity =>
         {
-            entity.ToTable("plans", "billing");
+            entity.ToTable("plans");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(256);
             entity.Property(e => e.Tier).IsRequired();
@@ -810,7 +832,7 @@ public class AppDbContext : DbContext
         // ── PARTNER PLANS ─────────────────────────────────────────────
         modelBuilder.Entity<PartnerPlan>(entity =>
         {
-            entity.ToTable("partner_plans", "identity");
+            entity.ToTable("partner_plans");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(256);
             entity.Property(e => e.EntitlementsJson).HasColumnType("jsonb");
@@ -829,7 +851,7 @@ public class AppDbContext : DbContext
         // ── SUBSCRIPTIONS ─────────────────────────────────────────────
         modelBuilder.Entity<Subscription>(entity =>
         {
-            entity.ToTable("subscriptions", "billing");
+            entity.ToTable("subscriptions");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Status).IsRequired();
             entity.Property(e => e.StartsAt).HasColumnType("timestamptz");
@@ -856,7 +878,7 @@ public class AppDbContext : DbContext
         // ── LICENSES ──────────────────────────────────────────────────
         modelBuilder.Entity<License>(entity =>
         {
-            entity.ToTable("licenses", "identity");
+            entity.ToTable("licenses");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Status).IsRequired();
             entity.Property(e => e.StartsAt).HasColumnType("timestamptz");
@@ -890,7 +912,7 @@ public class AppDbContext : DbContext
         // ── USAGE RECORDS ─────────────────────────────────────────────
         modelBuilder.Entity<UsageRecord>(entity =>
         {
-            entity.ToTable("usage_records", "billing");
+            entity.ToTable("usage_records");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.IdempotencyKey).IsRequired().HasMaxLength(128);
             entity.Property(e => e.MetricType).IsRequired();
@@ -931,7 +953,7 @@ public class AppDbContext : DbContext
         // ── KNOWLEDGE BASES ───────────────────────────────────────────
         modelBuilder.Entity<KnowledgeBase>(entity =>
         {
-            entity.ToTable("knowledge_bases", "configuration");
+            entity.ToTable("knowledge_bases");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(256);
             entity.Property(e => e.CreatedAt).HasColumnType("timestamptz");

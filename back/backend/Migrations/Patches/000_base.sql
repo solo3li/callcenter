@@ -6,7 +6,6 @@
 -- Run: psql -U admin -d callcenter -f 001_initial_schema.sql
 -- =============================================================================
 
-BEGIN;
 
 -- =============================================================================
 -- 1. POSTGRESQL ENUMS
@@ -103,6 +102,44 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 -- Enable pgvector extension (for knowledge base embeddings)
+
+DO $$ BEGIN CREATE CAST (text AS user_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (text AS partner_relationship_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (text AS api_key_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (text AS human_agent_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (text AS access_key_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (text AS call_session_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (text AS call_direction) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (text AS participant_type) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (text AS call_transfer_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (text AS handoff_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (text AS license_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (text AS plan_tier) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (text AS recording_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (text AS metric_type) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (text AS action_type) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (text AS action_execution_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (text AS workflow_execution_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (text AS subscription_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+
+DO $$ BEGIN CREATE CAST (varchar AS user_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (varchar AS partner_relationship_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (varchar AS api_key_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (varchar AS human_agent_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (varchar AS access_key_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (varchar AS call_session_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (varchar AS call_direction) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (varchar AS participant_type) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (varchar AS call_transfer_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (varchar AS handoff_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (varchar AS license_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (varchar AS plan_tier) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (varchar AS recording_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (varchar AS metric_type) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (varchar AS action_type) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (varchar AS action_execution_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (varchar AS workflow_execution_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN CREATE CAST (varchar AS subscription_status) WITH INOUT AS IMPLICIT; EXCEPTION WHEN others THEN NULL; END $$;
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- =============================================================================
@@ -783,4 +820,3 @@ BEGIN
     END LOOP;
 END $$;
 
-COMMIT;

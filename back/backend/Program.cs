@@ -426,16 +426,25 @@ public class ModuleGroupingOperationFilter : Swashbuckle.AspNetCore.SwaggerGen.I
     {
         var segments = context.ApiDescription.RelativePath?.Split('/') ?? System.Array.Empty<string>();
         
-        string tag = "General";
+        string module = "General";
         if (segments.Length >= 2 && segments[0].Equals("api", System.StringComparison.OrdinalIgnoreCase))
         {
-            tag = char.ToUpper(segments[1][0]) + segments[1].Substring(1).Replace("-", " ");
+            var route = segments[1].ToLower();
+            module = route switch
+            {
+                "auth" or "api-keys" or "human-agents" or "partners" or "partner-relationships" or "partner-plans" or "licenses" => "Identity",
+                "plans" or "subscriptions" or "usage" => "Billing",
+                "workflows" or "workflow-versions" or "personas" or "knowledge-bases" or "knowledge-documents" or "knowledge-chunks" or "actions" or "call-configurations" => "Configuration",
+                "call" or "calls" or "webhooks" or "livekit" or "sip" or "token" => "Call Operations",
+                "stats" => "Analytics",
+                _ => char.ToUpper(route[0]) + route.Substring(1).Replace("-", " ")
+            };
         }
         else if (segments.Length >= 1)
         {
-            tag = char.ToUpper(segments[0][0]) + segments[0].Substring(1).Replace("-", " ");
+            module = char.ToUpper(segments[0][0]) + segments[0].Substring(1).Replace("-", " ");
         }
 
-        operation.Tags = new System.Collections.Generic.List<Microsoft.OpenApi.Models.OpenApiTag> { new Microsoft.OpenApi.Models.OpenApiTag { Name = tag } };
+        operation.Tags = new System.Collections.Generic.List<Microsoft.OpenApi.Models.OpenApiTag> { new Microsoft.OpenApi.Models.OpenApiTag { Name = module } };
     }
 }
