@@ -162,6 +162,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new() { Title = "AI Calling Platform API", Version = "v1" });
+    c.OperationFilter<ModuleGroupingOperationFilter>();
     c.AddSecurityDefinition("Bearer", new()
     {
         Description = "JWT Authorization header. Example: \"Bearer {token}\"",
@@ -418,3 +419,23 @@ public class TransferTimeoutProcessor
 }
 
 
+
+public class ModuleGroupingOperationFilter : Swashbuckle.AspNetCore.SwaggerGen.IOperationFilter
+{
+    public void Apply(Microsoft.OpenApi.Models.OpenApiOperation operation, Swashbuckle.AspNetCore.SwaggerGen.OperationFilterContext context)
+    {
+        var segments = context.ApiDescription.RelativePath?.Split('/') ?? System.Array.Empty<string>();
+        
+        string tag = "General";
+        if (segments.Length >= 2 && segments[0].Equals("api", System.StringComparison.OrdinalIgnoreCase))
+        {
+            tag = char.ToUpper(segments[1][0]) + segments[1].Substring(1).Replace("-", " ");
+        }
+        else if (segments.Length >= 1)
+        {
+            tag = char.ToUpper(segments[0][0]) + segments[0].Substring(1).Replace("-", " ");
+        }
+
+        operation.Tags = new System.Collections.Generic.List<Microsoft.OpenApi.Models.OpenApiTag> { new Microsoft.OpenApi.Models.OpenApiTag { Name = tag } };
+    }
+}
