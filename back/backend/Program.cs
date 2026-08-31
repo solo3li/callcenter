@@ -108,6 +108,7 @@ dataSourceBuilder.MapEnum<backend.Models.Enums.ActionType>("action_type", transl
 dataSourceBuilder.MapEnum<backend.Models.Enums.ActionExecutionStatus>("action_execution_status", translator);
 dataSourceBuilder.MapEnum<backend.Models.Enums.WorkflowExecutionStatus>("workflow_execution_status", translator);
 dataSourceBuilder.MapEnum<backend.Models.Enums.SubscriptionStatus>("subscription_status", translator);
+dataSourceBuilder.UseVector();
 var dataSource = dataSourceBuilder.Build();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
