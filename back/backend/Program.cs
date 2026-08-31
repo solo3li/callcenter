@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
+using Scalar.AspNetCore;
 using Hangfire;
 using Hangfire.PostgreSql;
 using StackExchange.Redis;
@@ -229,7 +230,12 @@ app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = provider });
 app.UseAuthMiddleware();
 
 app.UseSwagger();
-app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "AI Calling Platform API v1"));
+app.MapScalarApiReference(options =>
+{
+    options.WithTitle("AI Calling Platform API");
+    options.WithTheme(Scalar.AspNetCore.ScalarTheme.DeepSpace);
+    options.WithDefaultHttpClient(Scalar.AspNetCore.ScalarTarget.CSharp, Scalar.AspNetCore.ScalarClient.HttpClient);
+});
 
 app.UseHangfireDashboard("/hangfire");
 

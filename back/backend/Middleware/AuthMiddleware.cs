@@ -36,6 +36,7 @@ namespace backend.Middleware
                 path.StartsWith("/hubs/") ||
                 path.StartsWith("/hangfire") ||
                 path.StartsWith("/swagger") ||
+                path.StartsWith("/scalar") ||
                 path.StartsWith("/api/token") ||
                 path.StartsWith("/api/livekit/") ||
                 path.StartsWith("/api/webhooks/") ||
