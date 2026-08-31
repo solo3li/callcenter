@@ -371,6 +371,7 @@ namespace backend.Services
             return await _db.CallTransfers
                 .Where(t => t.CallSessionId == callSessionId)
                 .Include(t => t.ToHumanAgent)
+                .OrderByDescending(t => t.RequestedAt)
                 .Select(t => new CallTransferDto(
                     t.Id,
                     t.CallSessionId,
@@ -389,7 +390,6 @@ namespace backend.Services
                     t.CreatedAt,
                     t.UpdatedAt
                 ))
-                .OrderByDescending(t => t.RequestedAt)
                 .ToListAsync();
         }
 

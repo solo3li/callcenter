@@ -25,6 +25,7 @@ namespace backend.Services
         {
             return await _db.CallRecordings
                 .Where(r => r.CallSessionId == callSessionId)
+                .OrderByDescending(r => r.CreatedAt)
                 .Select(r => new CallRecordingDto(
                     r.Id,
                     r.CallSessionId,
@@ -37,7 +38,6 @@ namespace backend.Services
                     r.CreatedAt,
                     r.CompletedAt
                 ))
-                .OrderByDescending(r => r.CreatedAt)
                 .ToListAsync();
         }
 

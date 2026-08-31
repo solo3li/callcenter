@@ -119,13 +119,14 @@ namespace backend.Services
             return await _db.CallHandoffs
                 .Where(h => h.CallSessionId == callSessionId)
                 .Include(h => h.ToHumanAgent)
+                .OrderByDescending(h => h.CreatedAt)
                 .Select(h => new CallHandoffDto(
                     h.Id,
                     h.CallSessionId,
                     h.CallTransferId,
                     h.FromParticipantId,
                     h.ToHumanAgentId,
-                    h.ToHumanAgent.Name,
+                    h.ToHumanAgent != null ? h.ToHumanAgent.Name : null,
                     h.Reason,
                     h.Summary,
                     h.ContextDataJson,
@@ -134,7 +135,6 @@ namespace backend.Services
                     h.DeliveredAt,
                     h.AcceptedAt
                 ))
-                .OrderByDescending(h => h.CreatedAt)
                 .ToListAsync();
         }
 
