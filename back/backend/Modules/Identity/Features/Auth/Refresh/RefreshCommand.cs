@@ -1,6 +1,8 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Linq;
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using MediatR;
 using backend.Data;
@@ -15,7 +17,7 @@ using backend.Models.Enums;
 
 namespace backend.Modules.Identity.Features.Auth.Refresh;
 
-public record RefreshCommand(string Token) : IRequest<AuthResponse?>;
+public record RefreshCommand(string AccessToken, string RefreshToken) : IRequest<AuthResponse?>;
 
 public class RefreshCommandHandler : IRequestHandler<RefreshCommand, AuthResponse?>
 {
@@ -30,23 +32,31 @@ public class RefreshCommandHandler : IRequestHandler<RefreshCommand, AuthRespons
 
     public async Task<AuthResponse?> Handle(RefreshCommand request, CancellationToken cancellationToken)
     {
-        var userId = _tokenService.ValidateToken(request.Token);
-        if (!userId.HasValue)
+        var principal = _tokenService.GetPrincipalFromExpiredToken(request.AccessToken);
+        if (principal == null)
             return null;
 
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId.Value, cancellationToken);
-        if (user == null)
+        var sub = principal.Claims.FirstOrDefault(c => c.Type == "sub" || c.Type == ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(sub) || !Guid.TryParse(sub, out var userId))
+            return null;
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+        if (user == null || user.RefreshToken != request.RefreshToken || user.RefreshTokenExpiryTime <= DateTime.UtcNow)
             return null;
 
         var newToken = _tokenService.GenerateJwt(user);
         var expiresAt = DateTime.UtcNow.AddHours(24);
-        var refreshToken = Guid.NewGuid().ToString("N");
+        var newRefreshToken = Guid.NewGuid().ToString("N");
+
+        user.RefreshToken = newRefreshToken;
+        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
+        await _db.SaveChangesAsync(cancellationToken);
 
         var dto = new UserDto(
             user.Id, user.Email, user.DisplayName, user.CompanyName,
             user.Status.ToString(), user.IsPartner,
             user.StandardCredits, user.PremiumCredits, user.CreatedAt);
 
-        return new AuthResponse(newToken, refreshToken, expiresAt, dto);
+        return new AuthResponse(newToken, newRefreshToken, expiresAt, dto);
     }
 }

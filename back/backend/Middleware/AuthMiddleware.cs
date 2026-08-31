@@ -30,6 +30,7 @@ namespace backend.Middleware
 
             if (path.StartsWith("/api/auth/register") ||
                 path.StartsWith("/api/auth/login") ||
+                path.StartsWith("/api/auth/refresh") ||
                 path.StartsWith("/api/auth/agent-login") ||
                 path.StartsWith("/api/health") ||
                 path.StartsWith("/api/version") ||

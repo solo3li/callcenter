@@ -50,6 +50,10 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, AuthResponse>
         var expiresAt = DateTime.UtcNow.AddHours(24);
         var refreshToken = Guid.NewGuid().ToString("N");
 
+        user.RefreshToken = refreshToken;
+        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
+        await _db.SaveChangesAsync(cancellationToken);
+
         return new AuthResponse(accessToken, refreshToken, expiresAt, dto);
     }
 }

@@ -56,15 +56,9 @@ namespace backend.Modules.Identity.Endpoints
                 }
             }).RequireRateLimiting("auth");
 
-            app.MapPost("/api/auth/refresh", async (HttpContext context, IMediator mediator) =>
+            app.MapPost("/api/auth/refresh", async (RefreshRequest request, IMediator mediator) =>
             {
-                var authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
-                if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-                    return Results.Unauthorized();
-
-                var token = authHeader["Bearer ".Length..].Trim();
-                
-                var response = await mediator.Send(new RefreshCommand(token));
+                var response = await mediator.Send(new RefreshCommand(request.AccessToken, request.RefreshToken));
                 if (response == null)
                     return Results.Unauthorized();
 

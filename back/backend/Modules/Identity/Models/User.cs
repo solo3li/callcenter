@@ -21,6 +21,9 @@ public class User
 
     public Guid? DefaultPersonaId { get; set; }
 
+    public string? RefreshToken { get; set; }
+    public DateTime? RefreshTokenExpiryTime { get; set; }
+
     public bool IsPartner { get; set; } = false;
 
     public decimal StandardCredits { get; set; } = 0;
