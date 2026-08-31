@@ -28,6 +28,37 @@ namespace backend.Middleware
         {
             var path = context.Request.Path.Value?.ToLowerInvariant() ?? string.Empty;
 
+            string? authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                var token = authHeader["Bearer ".Length..].Trim();
+                var userId = tokenService.ValidateToken(token);
+                if (userId.HasValue)
+                {
+                    context.Items["UserId"] = userId.Value;
+                }
+            }
+            else
+            {
+                string? apiKey = context.Request.Headers["X-API-Key"].FirstOrDefault();
+                if (!string.IsNullOrEmpty(apiKey))
+                {
+                    var userId = await apiKeyService.ValidateApiKeyAsync(apiKey);
+                    if (userId.HasValue)
+                    {
+                        context.Items["UserId"] = userId.Value;
+                    }
+                }
+            }
+
+            // If we successfully authenticated, we can just proceed.
+            if (context.Items.ContainsKey("UserId"))
+            {
+                await _next(context);
+                return;
+            }
+
+            // Otherwise, check if this is an endpoint that allows anonymous or alternative auth (like Service Token)
             if (path.StartsWith("/api/auth/register") ||
                 path.StartsWith("/api/auth/login") ||
                 path.StartsWith("/api/auth/refresh") ||
@@ -69,31 +100,6 @@ namespace backend.Middleware
             {
                 await _next(context);
                 return;
-            }
-
-            string? authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-            {
-                var token = authHeader["Bearer ".Length..].Trim();
-                var userId = tokenService.ValidateToken(token);
-                if (userId.HasValue)
-                {
-                    context.Items["UserId"] = userId.Value;
-                    await _next(context);
-                    return;
-                }
-            }
-
-            string? apiKey = context.Request.Headers["X-API-Key"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(apiKey))
-            {
-                var userId = await apiKeyService.ValidateApiKeyAsync(apiKey);
-                if (userId.HasValue)
-                {
-                    context.Items["UserId"] = userId.Value;
-                    await _next(context);
-                    return;
-                }
             }
 
             context.Response.StatusCode = 401;
