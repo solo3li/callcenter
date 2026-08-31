@@ -235,6 +235,7 @@ app.MapScalarApiReference(options =>
     options.WithTitle("AI Calling Platform API");
     options.WithTheme(Scalar.AspNetCore.ScalarTheme.DeepSpace);
     options.WithDefaultHttpClient(Scalar.AspNetCore.ScalarTarget.CSharp, Scalar.AspNetCore.ScalarClient.HttpClient);
+    options.WithOpenApiRoutePattern("/swagger/v1/swagger.json");
 });
 
 app.UseHangfireDashboard("/hangfire");
